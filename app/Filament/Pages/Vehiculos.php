@@ -160,9 +160,11 @@ class Vehiculos extends Page
 
         // Limpiar cualquier caché de citas pendientes
         $user = \Illuminate\Support\Facades\Auth::user();
-        if ($user && $user->c4c_internal_id) {
-            $cacheKey = "citas_pendientes_{$user->c4c_internal_id}";
+        if ($user) {
+            // ✅ LIMPIAR CACHÉ usando user_id (no c4c_internal_id)
+            $cacheKey = "citas_pendientes_{$user->id}";
             \Illuminate\Support\Facades\Cache::forget($cacheKey);
+            Log::info("[VehiculosPage] Caché de citas limpiado: {$cacheKey}");
         }
 
         // Actualizar estado
@@ -316,31 +318,41 @@ class Vehiculos extends Page
             Log::info("[VehiculosPage] Document number: " . ($user?->document_number ?? 'null'));
             Log::info("[VehiculosPage] Email: " . ($user?->email ?? 'null'));
 
-            // Consultar ambos orígenes SIEMPRE
+            // ✅ OPTIMIZACIÓN: Priorizar BD local si ya hay vehículos precargados
             $vehiculosSAP = collect();
             $vehiculosDB = collect();
             $webserviceEnabled = config('vehiculos_webservice.enabled', true);
 
-            if ($webserviceEnabled && !empty($user?->document_number)) {
-                $vehiculosSAP = $this->consultarVehiculosSAP($user, $codigosMarca);
-
-                // ✅ ELIMINADO RETRY AUTOMÁTICO - El circuit breaker maneja los fallos
-                // Si SAP falló, confiar en los datos locales sin reintentar
-                if ($vehiculosSAP->isEmpty()) {
-                    Log::info("[VehiculosPage] SAP no devolvió vehículos, usando solo datos locales");
-                }
-            } else {
-                if (empty($user?->document_number)) {
-                    Log::info("[VehiculosPage] Usuario sin document_number, saltando consulta SAP");
-                } else {
-                    Log::info("[VehiculosPage] Webservice SAP deshabilitado");
-                }
-            }
-
-            // Siempre cargar los locales
+            // PASO 1: Verificar si hay vehículos en BD local (precargados)
             $vehiculosDB = Vehicle::where('user_id', $user->id)
                 ->where('status', 'active')
                 ->get();
+
+            Log::info("[VehiculosPage] Vehículos en BD local: " . $vehiculosDB->count());
+
+            // PASO 2: Solo consultar SAP si NO hay vehículos en BD o se fuerza la sincronización
+            $forzarSincronizacion = session()->pull('forzar_sincronizacion_sap', false);
+            
+            if ($vehiculosDB->isEmpty() || $forzarSincronizacion) {
+                if ($webserviceEnabled && !empty($user?->document_number)) {
+                    Log::info("[VehiculosPage] " . ($forzarSincronizacion ? 'Sincronización forzada' : 'BD vacía') . " - Consultando SAP");
+                    $vehiculosSAP = $this->consultarVehiculosSAP($user, $codigosMarca);
+
+                    // ✅ ELIMINADO RETRY AUTOMÁTICO - El circuit breaker maneja los fallos
+                    // Si SAP falló, confiar en los datos locales sin reintentar
+                    if ($vehiculosSAP->isEmpty()) {
+                        Log::info("[VehiculosPage] SAP no devolvió vehículos, usando solo datos locales");
+                    }
+                } else {
+                    if (empty($user?->document_number)) {
+                        Log::info("[VehiculosPage] Usuario sin document_number, saltando consulta SAP");
+                    } else {
+                        Log::info("[VehiculosPage] Webservice SAP deshabilitado");
+                    }
+                }
+            } else {
+                Log::info("[VehiculosPage] ✅ Usando vehículos precargados de BD (" . $vehiculosDB->count() . " vehículos) - Saltando consulta SAP para evitar timeout");
+            }
 
             Log::info("[VehiculosPage] Vehículos BD encontrados para user_id {$user->id}: " . $vehiculosDB->count());
 
@@ -964,8 +976,25 @@ class Vehiculos extends Page
                 return;
             }
 
-            // UNA SOLA consulta WSCitas para el usuario
-            $citasPendientes = $this->consultarCitasPendientes($user);
+            // ✅ OPTIMIZACIÓN: Usar caché de 20 segundos para citas pendientes (actualización frecuente)
+            $cacheKey = "citas_pendientes_{$user->id}";
+            $citasPendientes = \Illuminate\Support\Facades\Cache::remember($cacheKey, 20, function () use ($user) {
+                Log::info("[VehiculosPage] Consultando citas desde API (sin caché)");
+                return $this->consultarCitasPendientes($user);
+            });
+
+            if ($citasPendientes === false || $citasPendientes === null) {
+                Log::warning("[VehiculosPage] No se pudieron obtener citas, usando datos sin enriquecer");
+                // Marcar todos como sin cita
+                $this->todosLosVehiculos = $this->todosLosVehiculos->map(function ($vehiculo) {
+                    $vehiculo['tiene_cita_agendada'] = false;
+                    $vehiculo['citas_pendientes_count'] = 0;
+                    return $vehiculo;
+                });
+                return;
+            }
+
+            Log::info("[VehiculosPage] Citas obtenidas (" . (\Illuminate\Support\Facades\Cache::has($cacheKey) ? 'desde caché' : 'desde API') . "): " . count($citasPendientes));
 
             // La consulta ahora se hace únicamente al endpoint, no a la base de datos local.
             // Crear índice para búsqueda O(1)
@@ -984,7 +1013,6 @@ class Vehiculos extends Page
 
                 if ($tieneCitaAgendada) {
                     $vehiculosConCitas++;
-                    Log::info("[VehiculosPage] Vehículo {$placa}: TIENE CITA AGENDADA");
                 }
 
                 // Agregar campo sin modificar vehículo existente
@@ -998,7 +1026,6 @@ class Vehiculos extends Page
 
         } catch (\Exception $e) {
             Log::error("[VehiculosPage] Error al enriquecer vehículos con citas: " . $e->getMessage());
-            Log::error("[VehiculosPage] Stack trace: " . $e->getTraceAsString());
 
             // Fallback seguro: marcar todos como "sin cita"
             $this->todosLosVehiculos = $this->todosLosVehiculos->map(function ($vehiculo) {
@@ -1022,6 +1049,9 @@ class Vehiculos extends Page
                 ->body('Consultando SAP para obtener vehículos actualizados')
                 ->info()
                 ->send();
+
+            // ✅ MARCAR FLAG PARA FORZAR CONSULTA A SAP en la próxima carga
+            session()->put('forzar_sincronizacion_sap', true);
 
             // Recargar vehículos forzando consulta a SAP
             $this->cargarVehiculos();
