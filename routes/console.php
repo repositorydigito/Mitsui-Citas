@@ -15,4 +15,5 @@ Schedule::job(new UpdateComodinUsersC4CIdJob)->everyMinute();
 // Comandos críticos cada minuto
 Schedule::command('appointment:sync --all')->everyMinute();
 Schedule::command('appointments:update-package-ids --sync')->everyMinute();
-Schedule::command('vehicles:update-tipo-valor-trabajo')->everyMinute();
+// DESACTIVADO: Comando consume muchos recursos
+// Schedule::command('vehicles:update-tipo-valor-trabajo')->everyMinute();
