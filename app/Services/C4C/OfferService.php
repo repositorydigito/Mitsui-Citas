@@ -7,6 +7,7 @@ use App\Models\CenterOrganizationMapping;
 use App\Models\Vehicle;
 use App\Services\C4C\C4CClient;
 use App\Services\C4C\CustomerService;
+use App\Services\C4C\VehicleService;
 use Illuminate\Support\Facades\Log;
 
 class OfferService
@@ -366,6 +367,51 @@ class OfferService
 
         // ✅ USAR CLIENTE ORIGINAL (sin fallback automático)
         $buyerC4CId = $user->c4c_internal_id;
+
+        // 🆕 AGREGADO: Obtener zIDCliente de VehicleService y reemplazar si es diferente
+        // Este campo viene de C4C y puede diferir del c4c_internal_id del usuario local
+        // Se usa SOLO en BusinessPartnerInternalID del BuyerParty (línea ~401)
+        try {
+            $vehicleService = new VehicleService();
+            $vehicleC4CData = $vehicleService->obtenerVehiculoPorPlaca($vehicle->license_plate);
+
+            if ($vehicleC4CData['success'] && $vehicleC4CData['found'] && isset($vehicleC4CData['data']['zIDCliente'])) {
+                $zIDClienteFromC4C = $vehicleC4CData['data']['zIDCliente'];
+
+                // 🆕 AGREGADO: Si zIDCliente es diferente al c4c_internal_id, usarlo en BuyerParty
+                if (!empty($zIDClienteFromC4C) && $zIDClienteFromC4C !== $buyerC4CId) {
+                    Log::info('⚠️ zIDCliente diferente de c4c_internal_id - reemplazando en BuyerParty', [
+                        'appointment_id' => $appointment->id,
+                        'original_buyer_c4c_id' => $buyerC4CId,
+                        'z_id_cliente_c4c' => $zIDClienteFromC4C,
+                        'vehicle_plate' => $vehicle->license_plate
+                    ]);
+                    // 🆕 AGREGADO: Reemplazar el valor que irá en BusinessPartnerInternalID
+                    $buyerC4CId = $zIDClienteFromC4C;
+                } else {
+                    Log::info('✅ zIDCliente coincide con c4c_internal_id o está vacío', [
+                        'appointment_id' => $appointment->id,
+                        'buyer_c4c_id' => $buyerC4CId,
+                        'z_id_cliente_from_c4c' => $zIDClienteFromC4C ?? 'NULL'
+                    ]);
+                }
+            } else {
+                Log::warning('⚠️ No se pudo obtener zIDCliente de VehicleService', [
+                    'appointment_id' => $appointment->id,
+                    'vehicle_plate' => $vehicle->license_plate,
+                    'vehicle_service_success' => $vehicleC4CData['success'] ?? false,
+                    'vehicle_found' => $vehicleC4CData['found'] ?? false
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('⚠️ Error obteniendo zIDCliente de VehicleService', [
+                'appointment_id' => $appointment->id,
+                'vehicle_plate' => $vehicle->license_plate,
+                'error' => $e->getMessage()
+            ]);
+            // 🆕 AGREGADO: Si falla, continuar con el c4c_internal_id original
+            // No lanzar excepción ya que puede ser opcional según flujo
+        }
 
         // ✅ ESTRUCTURA SOAP SEGÚN DOCUMENTACIÓN EXACTA
         $params = [

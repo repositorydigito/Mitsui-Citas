@@ -49,3 +49,5 @@ knowledge.md
 SOLUCION_TIMEOUT_LOGIN.md
 SOLUCION_TIMEOUT_VEHICULOS.md
 ANALISIS_TIMEOUT_REAL.md
+.mcp.json
+.gitignore
