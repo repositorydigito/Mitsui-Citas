@@ -321,6 +321,10 @@ class Appointment extends Model
      */
     public function isNoShow(): bool
     {
+        if ($this->no_show) {
+            return true;
+        }
+
         $states = $this->frontend_states ?? [];
         
         // Debe tener estado 'cita_confirmada'
@@ -367,7 +371,16 @@ class Appointment extends Model
      */
     public function markAsEnTrabajoActivo(): void
     {
-        $this->addFrontendState('en_trabajo', 'activo');
+        $states = $this->frontend_states ?? [];
+
+        $states['en_trabajo'] = [
+            'activo' => true,
+            'completado' => false,
+            'timestamp' => now()->format('Y-m-d H:i:s')
+        ];
+
+        $this->frontend_states = $states;
+        $this->save();
     }
 
     /**
@@ -376,18 +389,21 @@ class Appointment extends Model
     public function markAsEnTrabajoCompletado(): void
     {
         $states = $this->frontend_states ?? [];
-        
-        if (isset($states['en_trabajo'])) {
-            $states['en_trabajo']['completado'] = true;
-            $states['en_trabajo']['activo'] = false;
-        } else {
-            $states['en_trabajo'] = [
-                'completado' => true,
-                'activo' => false,
-                'timestamp' => now()->format('Y-m-d H:i:s')
-            ];
+
+        // Aseguramos que exista la estructura
+        if (!isset($states['en_trabajo'])) {
+            $states['en_trabajo'] = [];
         }
-        
+
+        // Marcamos flags correctos
+        $states['en_trabajo']['completado'] = true;
+        $states['en_trabajo']['activo'] = false;
+
+        // Aseguramos que tenga timestamp
+        if (empty($states['en_trabajo']['timestamp'])) {
+            $states['en_trabajo']['timestamp'] = now()->format('Y-m-d H:i:s');
+        }
+
         $this->frontend_states = $states;
         $this->save();
     }

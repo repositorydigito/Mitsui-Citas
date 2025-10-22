@@ -28,7 +28,6 @@ class DashboardKpi extends Page
 
     protected static string $view = 'filament.pages.dashboard-kpi';
 
-    // Propiedades para filtros
     public string $fechaInicio = '';
 
     public string $fechaFin = '';
@@ -43,7 +42,6 @@ class DashboardKpi extends Page
 
     public string $marcaSeleccionadaGraficos = 'Todos';
 
-    // Datos para los KPIs
     public int $citasGeneradas = 0;
 
     public int $citasEfectivas = 0;
@@ -54,7 +52,7 @@ class DashboardKpi extends Page
 
     public int $citasCanceladas = 0;
 
-    public int $citasNoShow = 0; // Changed from porcentajeCancelacion
+    public int $citasNoShow = 0;
 
     public int $citasMantenimiento = 0;
 
@@ -64,17 +62,14 @@ class DashboardKpi extends Page
 
     public int $porcentajePrepagados = 0;
 
-    // ✅ NUEVA PROPIEDAD PARA CITAS EN TRABAJO
     public int $citasEnTrabajo = 0;
 
     public int $cantidadUsuarios = 0;
 
-    // Datos para los gráficos
     public array $datosCantidadCitas = [];
 
     public array $datosTiempoPromedio = [];
 
-    // Opciones para los selectores
     public array $marcas = ['Todos'];
 
     public array $locales = [];
@@ -83,22 +78,15 @@ class DashboardKpi extends Page
 
     public function mount(): void
     {
-        // Establecer fechas por defecto (último mes)
         $fechaFin = now();
         $fechaInicio = now()->subMonth();
 
         $this->fechaInicio = $fechaInicio->format('d/m/Y');
         $this->fechaFin = $fechaFin->format('d/m/Y');
         $this->rangoFechas = $this->fechaInicio.' - '.$this->fechaFin;
-
-        // Cargar locales y marcas desde la base de datos
         $this->cargarLocales();
         $this->cargarMarcas();
-        
-        // Inicializar locales para gráficos
         $this->actualizarLocalesPorMarcaGraficos();
-
-        // Cargar datos iniciales
         $this->cargarDatos();
     }
 
@@ -252,8 +240,6 @@ class DashboardKpi extends Page
             })
             ->count();
 
-        // $this->citasEfectivas = (clone $query)->where('status', 'confirmed')->count(); // Ya no se usa
-
         $this->citasEnTrabajo = (clone $query)
             ->where('status', 'confirmed')
             ->where(function($q) {
@@ -267,7 +253,6 @@ class DashboardKpi extends Page
             ->where('rescheduled', 0)
             ->count();
 
-        // ✅ NUEVO: Calcular citas no show
         $this->citasNoShow = (clone $query)
             ->where('status', 'confirmed')
             ->noShow()
@@ -390,7 +375,16 @@ class DashboardKpi extends Page
             ->select(
                 DB::raw('DATE(appointment_date) as fecha'),
                 DB::raw('COUNT(*) as total'),
-                DB::raw('SUM(CASE WHEN status = "confirmed" THEN 1 ELSE 0 END) as efectivas')
+                DB::raw('SUM(
+                    CASE 
+                        WHEN status = "confirmed"
+                        AND (
+                            JSON_EXTRACT(frontend_states, "$.en_trabajo.activo") = true
+                            OR JSON_EXTRACT(frontend_states, "$.en_trabajo.completado") = true
+                        )
+                        THEN 1 ELSE 0
+                    END
+                ) as efectivas')
             )
             ->groupBy('fecha')
             ->orderBy('fecha')
@@ -427,7 +421,7 @@ class DashboardKpi extends Page
             'labels' => $labels,
             'generadas' => $generadas,
             'efectivas' => $efectivas,
-            'porcentajesEfectividad' => $porcentajesEfectividad, // Agregar porcentajes de efectividad
+            'porcentajesEfectividad' => $porcentajesEfectividad,
         ];
     }
 
