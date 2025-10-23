@@ -589,103 +589,98 @@
                     </div>
                 </button>
             </div>
-
-            <!-- SweetAlert2 CDN para mejores modales de confirmación -->
-            <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-            <!-- JavaScript para manejo de confirmación de anulación -->
-            <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                // Escuchar el evento de mostrar confirmación de eliminación
-                window.addEventListener('show-delete-confirmation', function(event) {
-                    // --- INICIO DE CÓDIGO DEFENSIVO ---
-                    if (!event.detail || event.detail.length < 2) {
-                        console.error('Error: No se recibieron datos suficientes en el evento show-delete-confirmation.', event);
-                        alert('Error: No se pudieron cargar los datos de la cita para la anulación.');
-                        return; // Detener ejecución si no hay datos
-                    }
-
-                    const uuid = event.detail[0]; // El UUID es el primer parámetro
-                    const citaData = event.detail[1]; // Los datos de la cita son el segundo parámetro
-                    console.log('UUID recibido:', uuid);
-                    console.log('Datos de cita recibidos:', citaData);
-
-                    if (!citaData) {
-                        console.error('Error: El objeto citaData no está definido en los datos del evento.', citaData);
-                        alert('Error: Datos de la cita incompletos.');
-                        return; // Detener ejecución si citaData no existe
-                    }
-                    // --- FIN DE CÓDIGO DEFENSIVO ---
-
-                    const fechaCita = citaData.fecha_cita || 'N/A';
-                    const horaCita = citaData.hora_cita || 'N/A';
-
-                    // Mostrar confirmación usando SweetAlert2 si está disponible, sino usar confirm nativo
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire({
-                            title: '¿Anular esta cita?',
-                            html: `
-                                <div class="text-left space-y-2">
-                                    <p><strong>Fecha:</strong> ${fechaCita}</p>
-                                    <p><strong>Hora:</strong> ${horaCita}</p>
-                                    <br>
-                                    <p class="text-red-600">⚠️ Esta acción no se puede deshacer</p>
-                                </div>
-                            `,
-                            icon: 'warning',
-                            showCancelButton: true,
-                            confirmButtonColor: '#dc2626',
-                            cancelButtonColor: '#6b7280',
-                            confirmButtonText: 'Sí, anular cita',
-                            cancelButtonText: 'Cancelar',
-                            reverseButtons: true
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                // Llamar al método Livewire para confirmar la anulación
-                                @this.call('confirmarAnulacion', uuid, citaData);
-                            }
-                        });
-                    } else {
-                        // Fallback para navegadores sin SweetAlert2
-                        const mensaje = `¿Está seguro de que desea anular esta cita?\n\n` +
-                                      `Número: ${numeroCita}\n` +
-                                      `Fecha: ${fechaCita}\n` +
-                                      `Hora: ${horaCita}\n\n` +
-                                      `Esta acción no se puede deshacer.`;
-                        
-                        if (confirm(mensaje)) {
-                            @this.call('confirmarAnulacion', uuid, citaData);
-                        }
-                    }
-                });
-
-                // Escuchar el evento para recargar citas después de un delay
-                window.addEventListener('reload-citas-after-delay', function() {
-                    setTimeout(function() {
-                        // Recargar el componente Livewire después de 3 segundos
-                        @this.$refresh();
-                    }, 3000);
-                });
-            });
-
-            // Función auxiliar para mostrar notificaciones personalizadas
-            function showNotification(type, title, message) {
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        icon: type,
-                        title: title,
-                        text: message,
-                        timer: 3000,
-                        timerProgressBar: true,
-                        showConfirmButton: false,
-                        toast: true,
-                        position: 'top-end'
-                    });
-                } else {
-                    alert(title + ': ' + message);
-                }
-            }
-            </script>
         </div>
     </x-filament-panels::page>
 </div>
+
+<!-- SweetAlert2 CDN para mejores modales de confirmación -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- JavaScript para manejo de confirmación de anulación -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Escuchar el evento de mostrar confirmación de eliminación
+    window.addEventListener('show-delete-confirmation', function(event) {
+        // --- INICIO DE CÓDIGO DEFENSIVO ---
+        if (!event.detail || event.detail.length < 2) {
+            console.error('Error: No se recibieron datos suficientes en el evento show-delete-confirmation.', event);
+            alert('Error: No se pudieron cargar los datos de la cita para la anulación.');
+            return; // Detener ejecución si no hay datos
+        }
+
+        const uuid = event.detail[0]; // El UUID es el primer parámetro
+        const citaData = event.detail[1]; // Los datos de la cita son el segundo parámetro
+        console.log('UUID recibido:', uuid);
+        console.log('Datos de cita recibidos:', citaData);
+
+        if (!citaData) {
+            console.error('Error: El objeto citaData no está definido en los datos del evento.', citaData);
+            alert('Error: Datos de la cita incompletos.');
+            return; // Detener ejecución si citaData no existe
+        }
+        // --- FIN DE CÓDIGO DEFENSIVO ---
+
+        const fechaCita = citaData.fecha_cita || 'N/A';
+        const horaCita = citaData.hora_cita || 'N/A';
+
+        // Mostrar confirmación usando SweetAlert2 si está disponible, sino usar confirm nativo
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: '¿Anular esta cita?',
+                html: `
+                    <div class="text-left space-y-2">
+                        <p><strong>Fecha:</strong> ${fechaCita}</p>
+                        <p><strong>Hora:</strong> ${horaCita}</p>
+                        <br>
+                        <p class="text-red-600">⚠️ Esta acción no se puede deshacer</p>
+                    </div>
+                `,
+                icon: 'warning',
+                showCancelButton: true,
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Sí, anular cita',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Llamar al método Livewire para confirmar la anulación
+                    @this.call('confirmarAnulacion', uuid, citaData);
+                }
+            });
+        } else {
+            // Fallback para navegadores sin SweetAlert2
+            const mensaje = `¿Está seguro de que desea anular esta cita?\n\n` +
+                          `Fecha: ${fechaCita}\n` +
+                          `Hora: ${horaCita}\n\n` +
+                          `⚠️ Esta acción no se puede deshacer`;
+
+            if (confirm(mensaje)) {
+                @this.call('confirmarAnulacion', uuid, citaData);
+            }
+        }
+    });
+
+    // Escuchar evento para mostrar notificaciones
+    window.addEventListener('show-notification', function(event) {
+        const data = event.detail[0];
+        showNotification(data.title, data.message, data.type);
+    });
+});
+
+// Función para mostrar notificaciones
+function showNotification(title, message, type = 'info') {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: title,
+            text: message,
+            icon: type,
+            timer: 3000,
+            showConfirmButton: false,
+            toast: true,
+            position: 'top-end'
+        });
+    } else {
+        alert(title + ': ' + message);
+    }
+}
+</script>
