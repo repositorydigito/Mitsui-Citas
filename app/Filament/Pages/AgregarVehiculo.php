@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Vehicle;
+use App\Services\C4C\VehicleService;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\Log;
@@ -190,6 +191,34 @@ class AgregarVehiculo extends Page
             $vehicle->has_prepaid_maintenance = $randomData['has_prepaid_maintenance'];
             $vehicle->prepaid_maintenance_expiry = $randomData['prepaid_maintenance_expiry'];
             $vehicle->status = 'active';
+
+            // 🆕 AGREGADO: Obtener zTipoValorTrabajo desde C4C si el vehículo existe
+            try {
+                $vehicleService = new VehicleService();
+                $vehicleC4CData = $vehicleService->obtenerVehiculoPorPlaca($vehicle->license_plate);
+
+                // 🆕 AGREGADO: Si encontramos el vehículo en C4C y tiene zTipoValorTrabajo, usarlo
+                if ($vehicleC4CData['success'] && $vehicleC4CData['found'] && !empty($vehicleC4CData['data']['zTipoValorTrabajo'])) {
+                    $vehicle->tipo_valor_trabajo = $vehicleC4CData['data']['zTipoValorTrabajo'];
+                    Log::info('[AgregarVehiculo] zTipoValorTrabajo obtenido desde C4C', [
+                        'license_plate' => $vehicle->license_plate,
+                        'tipo_valor_trabajo_c4c' => $vehicleC4CData['data']['zTipoValorTrabajo']
+                    ]);
+                } else {
+                    // 🆕 AGREGADO LOG: Si no se encuentra en C4C, usará el default del boot()
+                    Log::info('[AgregarVehiculo] Vehículo no encontrado en C4C o sin zTipoValorTrabajo, usará default', [
+                        'license_plate' => $vehicle->license_plate,
+                        'c4c_found' => $vehicleC4CData['found'] ?? false
+                    ]);
+                }
+            } catch (\Exception $e) {
+                // 🆕 AGREGADO: Si hay error en C4C, continuar con default del boot()
+                Log::warning('[AgregarVehiculo] Error obteniendo zTipoValorTrabajo desde C4C', [
+                    'license_plate' => $vehicle->license_plate,
+                    'error' => $e->getMessage()
+                ]);
+            }
+
             $vehicle->save();
 
             // Establecer flag en sesión para que la página de vehículos se actualice

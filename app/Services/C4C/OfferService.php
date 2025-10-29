@@ -7,6 +7,7 @@ use App\Models\CenterOrganizationMapping;
 use App\Models\Vehicle;
 use App\Services\C4C\C4CClient;
 use App\Services\C4C\CustomerService;
+use App\Services\C4C\VehicleService;
 use Illuminate\Support\Facades\Log;
 
 class OfferService
@@ -37,6 +38,16 @@ class OfferService
     public function crearOfertaDesdeCita(Appointment $appointment): array
     {
         try {
+            // 🆕 AGREGADO LOG 0: INICIO EXPLÍCITO de creación de oferta
+            Log::info('═════════════════════════════════════════════════════', [
+                'marker' => 'INICIO_CREACION_OFERTA'
+            ]);
+            Log::info('🚀🚀🚀 CREANDO OFERTA - INICIO DEL PROCESO COMPLETO 🚀🚀🚀', [
+                'timestamp' => now()->toDateTimeString(),
+                'appointment_id' => $appointment->id,
+                'appointment_number' => $appointment->appointment_number,
+                'status' => 'INICIANDO'
+            ]);
             Log::info('🚀 Iniciando creación de oferta con mapeo organizacional', [
                 'appointment_id' => $appointment->id,
                 'appointment_number' => $appointment->appointment_number,
@@ -47,9 +58,22 @@ class OfferService
             ]);
 
             // ✅ PASO 1: OBTENER MAPEO ORGANIZACIONAL
+            // 🆕 AGREGADO LOG: Buscando mapeo organizacional
+            Log::info('[PASO 1] Buscando mapeo organizacional', [
+                'appointment_id' => $appointment->id,
+                'center_code' => $appointment->center_code,
+                'brand_code' => $appointment->vehicle_brand_code
+            ]);
+
             $mapping = $this->obtenerMapeoOrganizacional($appointment);
 
             if (!$mapping) {
+                // 🆕 AGREGADO LOG: Falló - no hay mapeo
+                Log::error('❌ [PASO 1 FALLIDO] No se encontró mapeo organizacional', [
+                    'appointment_id' => $appointment->id,
+                    'center_code' => $appointment->center_code,
+                    'brand_code' => $appointment->vehicle_brand_code
+                ]);
                 return [
                     'success' => false,
                     'error' => 'No se encontró configuración organizacional para centro: ' .
@@ -57,6 +81,10 @@ class OfferService
                 ];
             }
 
+            // 🆕 AGREGADO LOG: Mapeo obtenido correctamente
+            Log::info('✅ [PASO 1 OK] Mapeo organizacional obtenido correctamente', [
+                'appointment_id' => $appointment->id
+            ]);
             Log::info('🏢 Mapeo organizacional obtenido', [
                 'center_code' => $appointment->center_code,
                 'brand_code' => $appointment->vehicle_brand_code,
@@ -66,7 +94,19 @@ class OfferService
             ]);
 
             // Validaciones básicas
+            // 🆕 AGREGADO LOG: Validando package_id
+            Log::info('[PASO 2] Validando requisitos básicos', [
+                'appointment_id' => $appointment->id,
+                'has_package_id' => !empty($appointment->package_id) ? 'YES' : 'NO',
+                'has_c4c_uuid' => !empty($appointment->c4c_uuid) ? 'YES' : 'NO'
+            ]);
+
             if (!$appointment->package_id) {
+                // 🆕 AGREGADO LOG: Falló - no hay package_id
+                Log::error('❌ [PASO 2 FALLIDO] No hay package_id', [
+                    'appointment_id' => $appointment->id,
+                    'package_id' => $appointment->package_id
+                ]);
                 return [
                     'success' => false,
                     'error' => 'No se puede crear oferta sin paquete ID',
@@ -75,6 +115,11 @@ class OfferService
             }
 
             if (!$appointment->c4c_uuid) {
+                // 🆕 AGREGADO LOG: Falló - no hay c4c_uuid
+                Log::error('❌ [PASO 2 FALLIDO] Cita no está sincronizada con C4C', [
+                    'appointment_id' => $appointment->id,
+                    'c4c_uuid' => $appointment->c4c_uuid
+                ]);
                 return [
                     'success' => false,
                     'error' => 'Cita debe estar sincronizada con C4C primero',
@@ -82,10 +127,42 @@ class OfferService
                 ];
             }
 
-            // ✅ PASO 2: PREPARAR PARÁMETROS CON ESTRUCTURA ORGANIZACIONAL REAL
+            // 🆕 AGREGADO LOG: Validaciones pasadas
+            Log::info('✅ [PASO 2 OK] Todas las validaciones básicas pasadas', [
+                'appointment_id' => $appointment->id
+            ]);
+
+            // ✅ PASO 3: PREPARAR PARÁMETROS CON ESTRUCTURA ORGANIZACIONAL REAL
+            // 🆕 AGREGADO LOG: Iniciando preparación de parámetros
+            Log::info('[PASO 3] Preparando parámetros SOAP para oferta', [
+                'appointment_id' => $appointment->id,
+                'status' => 'preparando_params'
+            ]);
+
             $params = $this->prepararParametrosOferta($appointment, $mapping);
 
-            // ✅ PASO 3: LLAMAR WEBSERVICE
+            // 🆕 AGREGADO LOG: Parámetros preparados exitosamente
+            Log::info('✅ [PASO 3 OK] Parámetros SOAP preparados exitosamente', [
+                'appointment_id' => $appointment->id,
+                'has_customer_quote' => isset($params['CustomerQuote']) ? 'YES' : 'NO'
+            ]);
+
+            // 🆕 AGREGADO LOG 11: Mostrar exactamente qué irá en BuyerParty.BusinessPartnerInternalID
+            Log::info('🔍 [OFFER] VALORES EN PARÁMETROS SOAP ANTES DE ENVIAR:', [
+                'appointment_id' => $appointment->id,
+                'buyer_party_business_partner_internal_id' => $params['CustomerQuote']['BuyerParty']['BusinessPartnerInternalID'] ?? 'NOT_SET',
+                'buyer_party_complete_data' => $params['CustomerQuote']['BuyerParty'] ?? 'NOT_SET',
+                'processing_type_code' => $params['CustomerQuote']['ProcessingTypeCode'] ?? 'NOT_SET',
+                'sales_org' => $params['CustomerQuote']['SalesAndServiceBusinessArea']['SalesOrganisationID'] ?? 'NOT_SET',
+                'items_count' => is_array($params['CustomerQuote']['Item'] ?? null) ? count($params['CustomerQuote']['Item']) : 'SINGLE_ITEM'
+            ]);
+
+            // ✅ PASO 4: LLAMAR WEBSERVICE
+            // 🆕 AGREGADO LOG: Iniciando llamada a webservice
+            Log::info('[PASO 4] Llamando webservice de ofertas C4C', [
+                'appointment_id' => $appointment->id,
+                'status' => 'enviando_soap'
+            ]);
             Log::info('📞 Llamando webservice de ofertas C4C', [
                 'wsdl' => $this->wsdl,
                 'method' => $this->method,
@@ -94,16 +171,43 @@ class OfferService
 
             $result = C4CClient::call($this->wsdl, $this->method, $params);
 
+            // 🆕 AGREGADO LOG: Respuesta recibida
+            Log::info('📬 [PASO 4] Respuesta recibida de C4C', [
+                'appointment_id' => $appointment->id,
+                'result_success' => $result['success'] ?? false,
+                'has_error' => isset($result['error']) ? 'YES' : 'NO'
+            ]);
+
             if ($result['success']) {
+                // 🆕 AGREGADO LOG: Respuesta fue exitosa (HTTP 200)
+                Log::info('✅ [PASO 5] Respuesta HTTP exitosa (200 OK)', [
+                    'appointment_id' => $appointment->id,
+                    'status' => 'http_success'
+                ]);
+
                 // ✅ MANEJAR DIFERENTES ESTRUCTURAS DE RESPUESTA
                 $data = $result['data'] ?? [];
                 if (is_object($data)) {
                     $data = json_decode(json_encode($data), true);
                 }
 
+                // 🆕 AGREGADO LOG: Validando respuesta de C4C
+                Log::info('[PASO 6] Validando estructura de respuesta C4C', [
+                    'appointment_id' => $appointment->id,
+                    'data_type' => gettype($data),
+                    'has_soap_body' => isset($data['Body']) ? 'YES' : 'NO'
+                ]);
+
                 // ✅ VERIFICAR ERRORES EN LA RESPUESTA C4C ANTES DE PROCESAR
                 $validationResult = $this->verificarErroresC4C($data);
                 if (!$validationResult['success']) {
+                    // 🆕 AGREGADO LOG: Falló validación de C4C
+                    Log::error('❌ [PASO 6 FALLIDO] Errores de validación en respuesta C4C', [
+                        'appointment_id' => $appointment->id,
+                        'validation_success' => false,
+                        'error_count' => count($validationResult['errors'] ?? [])
+                    ]);
+
                     // Log adicional de contexto completo para diagnóstico
                     try {
                         $userForBuyer = \App\Models\User::where('document_number', $appointment->customer_ruc)->first();
@@ -127,11 +231,24 @@ class OfferService
                     ]);
 
 
+                    // 🆕 AGREGADO LOG: Actualizando appointment con error
+                    Log::info('📝 [PASO 6 FALLIDO] Actualizando appointment con error', [
+                        'appointment_id' => $appointment->id,
+                        'updating_fields' => ['offer_creation_failed', 'offer_creation_error', 'offer_creation_attempts']
+                    ]);
+
                     // Actualizar appointment con información del error (COMPORTAMIENTO ORIGINAL)
                     $appointment->update([
                         'offer_creation_failed' => true,
                         'offer_creation_error' => $validationResult['error_message'],
                         'offer_creation_attempts' => ($appointment->offer_creation_attempts ?? 0) + 1
+                    ]);
+
+                    // 🆕 AGREGADO LOG: Fallo final de creación
+                    Log::error('❌ CREACIÓN DE OFERTA FALLIDA - Errores de validación en C4C', [
+                        'appointment_id' => $appointment->id,
+                        'error_message' => $validationResult['error_message'],
+                        'status' => 'FAILED'
                     ]);
 
                     return [
@@ -142,14 +259,31 @@ class OfferService
                     ];
                 }
 
+                // 🆕 AGREGADO LOG: Validación pasada, extrayendo ID de oferta
+                Log::info('✅ [PASO 6 OK] Validación de C4C exitosa', [
+                    'appointment_id' => $appointment->id
+                ]);
+                Log::info('[PASO 7] Extrayendo ID de oferta de respuesta C4C', [
+                    'appointment_id' => $appointment->id
+                ]);
+
                 // ✅ EXTRAER ID CORRECTO DE LA RESPUESTA SAP C4C (igual que en actualizarAppointmentConOferta)
                 $customerQuote = $data['Body']['CustomerQuoteBundleMaintainConfirmation_sync_V1']['CustomerQuote'] ?? [];
                 $offerId = $customerQuote['ID'] ?? $data['offer_id'] ?? $data['ID'] ?? null;
 
                 if (!$offerId) {
-                    Log::error('❌ No se pudo extraer el ID de la oferta de la respuesta C4C', [
+                    // 🆕 AGREGADO LOG: No se pudo extraer ID
+                    Log::error('❌ [PASO 7 FALLIDO] No se pudo extraer el ID de la oferta de la respuesta C4C', [
                         'appointment_id' => $appointment->id,
-                        'response_data' => $data
+                        'has_body' => isset($data['Body']) ? 'YES' : 'NO',
+                        'has_confirmation' => isset($data['Body']['CustomerQuoteBundleMaintainConfirmation_sync_V1']) ? 'YES' : 'NO',
+                        'has_customer_quote' => isset($customerQuote) ? 'YES' : 'NO'
+                    ]);
+
+                    // 🆕 AGREGADO LOG: Fallo final
+                    Log::error('❌ CREACIÓN DE OFERTA FALLIDA - No se pudo extraer el ID de la oferta', [
+                        'appointment_id' => $appointment->id,
+                        'status' => 'FAILED'
                     ]);
 
                     return [
@@ -159,8 +293,36 @@ class OfferService
                     ];
                 }
 
+                // 🆕 AGREGADO LOG: ID de oferta extraído correctamente
+                Log::info('✅ [PASO 7 OK] ID de oferta extraído correctamente', [
+                    'appointment_id' => $appointment->id,
+                    'offer_id' => $offerId
+                ]);
+
+                // 🆕 AGREGADO LOG: Actualizando appointment con datos de oferta
+                Log::info('[PASO 8] Actualizando appointment con datos de oferta en C4C', [
+                    'appointment_id' => $appointment->id,
+                    'c4c_offer_id' => $offerId
+                ]);
+
                 $this->actualizarAppointmentConOferta($appointment, $result);
 
+                // 🆕 AGREGADO LOG: Appointment actualizado
+                Log::info('✅ [PASO 8 OK] Appointment actualizado exitosamente', [
+                    'appointment_id' => $appointment->id,
+                    'c4c_offer_id' => $offerId
+                ]);
+
+                // 🆕 AGREGADO LOG: ÉXITO FINAL
+                Log::info('═════════════════════════════════════════════════════', [
+                    'marker' => 'OFERTA_EXITOSA'
+                ]);
+                Log::info('✅✅✅ CREACIÓN DE OFERTA EXITOSA ✅✅✅', [
+                    'appointment_id' => $appointment->id,
+                    'c4c_offer_id' => $offerId,
+                    'timestamp' => now()->toDateTimeString(),
+                    'status' => 'SUCCESS'
+                ]);
                 Log::info('✅ Oferta creada exitosamente en C4C', [
                     'appointment_id' => $appointment->id,
                     'c4c_offer_id' => $offerId,
@@ -174,10 +336,25 @@ class OfferService
                     'data' => $data
                 ];
             } else {
+                // 🆕 AGREGADO LOG: HTTP falló
+                Log::error('❌ [PASO 5 FALLIDO] Error HTTP en respuesta de C4C', [
+                    'appointment_id' => $appointment->id,
+                    'result_success' => false,
+                    'http_status' => 'ERROR'
+                ]);
+
                 // ✅ MEJORAR MANEJO DE ERRORES SOAP FAULT
                 $errorMessage = $result['error'] ?? 'Error desconocido en C4C';
                 $transactionId = $result['transaction_id'] ?? null;
                 $faultCode = $result['fault_code'] ?? null;
+
+                // 🆕 AGREGADO LOG: Detalles del error
+                Log::error('❌ [PASO 5 DETALLE] Detalles del error HTTP/SOAP', [
+                    'appointment_id' => $appointment->id,
+                    'error_message' => $errorMessage,
+                    'fault_code' => $faultCode,
+                    'transaction_id' => $transactionId
+                ]);
 
                 Log::error('❌ Error en C4C al crear oferta', [
                     'appointment_id' => $appointment->id,
@@ -187,12 +364,24 @@ class OfferService
                     'full_result' => $result
                 ]);
 
+                // 🆕 AGREGADO LOG: Actualizando appointment con error
+                Log::info('📝 [PASO 5 FALLIDO] Actualizando appointment con error', [
+                    'appointment_id' => $appointment->id,
+                    'updating_fields' => ['offer_creation_failed', 'offer_creation_error', 'offer_creation_attempts', 'c4c_transaction_id']
+                ]);
+
                 // Actualizar appointment con información del error
                 $appointment->update([
                     'offer_creation_failed' => true,
                     'offer_creation_error' => $errorMessage,
                     'offer_creation_attempts' => ($appointment->offer_creation_attempts ?? 0) + 1,
                     'c4c_transaction_id' => $transactionId
+                ]);
+
+                // 🆕 AGREGADO LOG: Fallo final
+                Log::error('❌ CREACIÓN DE OFERTA FALLIDA - Error HTTP/SOAP en C4C', [
+                    'appointment_id' => $appointment->id,
+                    'status' => 'FAILED'
                 ]);
 
                 return [
@@ -204,10 +393,25 @@ class OfferService
                 ];
             }
         } catch (\Exception $e) {
+            // 🆕 AGREGADO LOG: Excepción no manejada
+            Log::error('💥 [EXCEPCIÓN] Excepción no manejada durante creación de oferta', [
+                'appointment_id' => $appointment->id,
+                'exception_message' => $e->getMessage(),
+                'exception_code' => $e->getCode(),
+                'exception_class' => get_class($e)
+            ]);
+
             Log::error('❌ Error creando oferta', [
                 'appointment_id' => $appointment->id,
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
+            ]);
+
+            // 🆕 AGREGADO LOG: Fallo final por excepción
+            Log::error('❌ CREACIÓN DE OFERTA FALLIDA - Excepción no manejada', [
+                'appointment_id' => $appointment->id,
+                'status' => 'FAILED',
+                'reason' => 'exception'
             ]);
 
             return [
@@ -366,6 +570,110 @@ class OfferService
 
         // ✅ USAR CLIENTE ORIGINAL (sin fallback automático)
         $buyerC4CId = $user->c4c_internal_id;
+
+        // 🆕 AGREGADO: Obtener zIDCliente de VehicleService y reemplazar si es diferente
+        // Este campo viene de C4C y puede diferir del c4c_internal_id del usuario local
+        // Se usa SOLO en BusinessPartnerInternalID del BuyerParty (línea ~401)
+
+        // 🆕 AGREGADO LOG 1: Inicio del proceso de obtención de zIDCliente
+        Log::info('🔍 [OFFER] INICIO: Obtención de zIDCliente desde VehicleService', [
+            'appointment_id' => $appointment->id,
+            'vehicle_plate' => $vehicle->license_plate,
+            'current_buyer_c4c_id' => $buyerC4CId,
+            'user_c4c_internal_id' => $user->c4c_internal_id
+        ]);
+
+        try {
+            $vehicleService = new VehicleService();
+
+            // 🆕 AGREGADO LOG 2: Llamando a VehicleService
+            Log::info('🔍 [OFFER] LLAMANDO: VehicleService::obtenerVehiculoPorPlaca()', [
+                'appointment_id' => $appointment->id,
+                'vehicle_plate' => $vehicle->license_plate
+            ]);
+
+            $vehicleC4CData = $vehicleService->obtenerVehiculoPorPlaca($vehicle->license_plate);
+
+            // 🆕 AGREGADO LOG 3: Respuesta de VehicleService
+            Log::info('🔍 [OFFER] RESPUESTA VehicleService:', [
+                'appointment_id' => $appointment->id,
+                'vehicle_plate' => $vehicle->license_plate,
+                'success' => $vehicleC4CData['success'] ?? false,
+                'found' => $vehicleC4CData['found'] ?? false,
+                'has_data' => isset($vehicleC4CData['data']) ? 'YES' : 'NO'
+            ]);
+
+            if ($vehicleC4CData['success'] && $vehicleC4CData['found'] && isset($vehicleC4CData['data']['zIDCliente'])) {
+                $zIDClienteFromC4C = $vehicleC4CData['data']['zIDCliente'];
+
+                // 🆕 AGREGADO LOG 4: zIDCliente extraído correctamente
+                Log::info('🔍 [OFFER] zIDCliente EXTRAÍDO:', [
+                    'appointment_id' => $appointment->id,
+                    'z_id_cliente_value' => $zIDClienteFromC4C,
+                    'z_id_cliente_type' => gettype($zIDClienteFromC4C),
+                    'z_id_cliente_is_empty' => empty($zIDClienteFromC4C) ? 'TRUE (VACÍO)' : 'FALSE (TIENE VALOR)'
+                ]);
+
+                // 🆕 AGREGADO: Si zIDCliente es diferente al c4c_internal_id, usarlo en BuyerParty
+                if (!empty($zIDClienteFromC4C) && $zIDClienteFromC4C !== $buyerC4CId) {
+                    // 🆕 AGREGADO LOG 5: REEMPLAZO - valores diferentes
+                    Log::info('✅ [OFFER] REEMPLAZO ACTIVADO: zIDCliente DIFERENTE de c4c_internal_id', [
+                        'appointment_id' => $appointment->id,
+                        'original_buyer_c4c_id_SERÁ_REEMPLAZADO' => $buyerC4CId,
+                        'new_z_id_cliente_SERÁ_USADO' => $zIDClienteFromC4C,
+                        'vehicle_plate' => $vehicle->license_plate,
+                        'comparison' => "{$zIDClienteFromC4C} !== {$buyerC4CId}"
+                    ]);
+                    // 🆕 AGREGADO: Reemplazar el valor que irá en BusinessPartnerInternalID
+                    $buyerC4CId = $zIDClienteFromC4C;
+
+                    // 🆕 AGREGADO LOG 6: Confirmación de reemplazo
+                    Log::info('✅ [OFFER] REEMPLAZO COMPLETADO: variable $buyerC4CId actualizada', [
+                        'appointment_id' => $appointment->id,
+                        'new_value' => $buyerC4CId,
+                        'will_use_in_BusinessPartnerInternalID' => 'YES'
+                    ]);
+                } else {
+                    // 🆕 AGREGADO LOG 7: Sin reemplazo - valores coinciden o está vacío
+                    Log::info('ℹ️ [OFFER] SIN REEMPLAZO: zIDCliente coincide con c4c_internal_id o está vacío', [
+                        'appointment_id' => $appointment->id,
+                        'z_id_cliente_from_c4c' => $zIDClienteFromC4C ?? 'NULL',
+                        'buyer_c4c_id' => $buyerC4CId,
+                        'reason' => empty($zIDClienteFromC4C) ? 'zIDCliente_está_vacío' : 'valores_coinciden',
+                        'comparison' => empty($zIDClienteFromC4C) ? 'empty' : "{$zIDClienteFromC4C} === {$buyerC4CId}"
+                    ]);
+                }
+            } else {
+                // 🆕 AGREGADO LOG 8: No se pudo obtener zIDCliente
+                Log::warning('⚠️ [OFFER] FALLO: No se pudo obtener zIDCliente de VehicleService', [
+                    'appointment_id' => $appointment->id,
+                    'vehicle_plate' => $vehicle->license_plate,
+                    'vehicle_service_success' => $vehicleC4CData['success'] ?? false,
+                    'vehicle_found' => $vehicleC4CData['found'] ?? false,
+                    'has_z_id_cliente_field' => isset($vehicleC4CData['data']['zIDCliente']) ? 'YES' : 'NO',
+                    'fallback_to_original' => "using {$buyerC4CId}"
+                ]);
+            }
+        } catch (\Exception $e) {
+            // 🆕 AGREGADO LOG 9: Excepción durante obtención de zIDCliente
+            Log::warning('⚠️ [OFFER] EXCEPCIÓN: Error obteniendo zIDCliente de VehicleService', [
+                'appointment_id' => $appointment->id,
+                'vehicle_plate' => $vehicle->license_plate,
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'fallback_to_original' => "using {$buyerC4CId}"
+            ]);
+            // 🆕 AGREGADO: Si falla, continuar con el c4c_internal_id original
+            // No lanzar excepción ya que puede ser opcional según flujo
+        }
+
+        // 🆕 AGREGADO LOG 10: Resumen FINAL - qué valor se usará en SOAP
+        Log::info('📋 [OFFER] RESUMEN FINAL: BusinessPartnerInternalID será:', [
+            'appointment_id' => $appointment->id,
+            'final_buyer_c4c_id_to_use' => $buyerC4CId,
+            'xml_element' => 'BuyerParty.BusinessPartnerInternalID',
+            'will_be_sent_in_soap' => $buyerC4CId
+        ]);
 
         // ✅ ESTRUCTURA SOAP SEGÚN DOCUMENTACIÓN EXACTA
         $params = [
