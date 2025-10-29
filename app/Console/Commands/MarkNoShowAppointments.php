@@ -37,7 +37,7 @@ class MarkNoShowAppointments extends Command
                         AND TIMESTAMPDIFF(
                             HOUR,
                             STR_TO_DATE(
-                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')),
+                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')),
                                 '%Y-%m-%d %H:%i:%s'
                             ),
                             NOW()
@@ -54,7 +54,7 @@ class MarkNoShowAppointments extends Command
                         AND TIMESTAMPDIFF(
                             HOUR,
                             STR_TO_DATE(
-                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')),
+                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')),
                                 '%Y-%m-%d %H:%i:%s'
                             ),
                             STR_TO_DATE(

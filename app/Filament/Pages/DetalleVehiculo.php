@@ -1030,35 +1030,55 @@ class DetalleVehiculo extends Page
     protected function guardarEstadosFrontendEnBD(string $c4cUuid, array $estadoInfo): void
     {
         try {
-            // Extract the frontend states from the estadoInfo
-            $frontendStates = [
-                'cita_confirmada' => [
-                    'activo' => $estadoInfo['etapas']['cita_confirmada']['activo'] ?? false,
-                    'completado' => $estadoInfo['etapas']['cita_confirmada']['completado'] ?? false,
-                ],
-                'en_trabajo' => [
-                    'activo' => $estadoInfo['etapas']['en_trabajo']['activo'] ?? false,
-                    'completado' => $estadoInfo['etapas']['en_trabajo']['completado'] ?? false,
-                ],
-                'trabajo_concluido' => [
-                    'activo' => $estadoInfo['etapas']['trabajo_concluido']['activo'] ?? false,
-                    'completado' => $estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false,
-                ]
-            ];
-            
-            // Find the appointment by c4c_uuid and update the frontend_states
             $appointment = Appointment::where('c4c_uuid', $c4cUuid)->first();
             
-            if ($appointment) {
-                $appointment->frontend_states = $frontendStates;
-                $appointment->save();
-                
-                Log::info("[DetalleVehiculo] Estados frontend guardados en BD para cita: {$c4cUuid}", [
-                    'frontend_states' => $frontendStates
-                ]);
-            } else {
+            if (!$appointment) {
                 Log::warning("[DetalleVehiculo] No se encontró la cita para guardar estados frontend: {$c4cUuid}");
+                return;
             }
+
+            $currentStates = $appointment->frontend_states ?? [];
+            $now = now()->format('Y-m-d H:i:s');
+            
+            // Verificar cambios en cita_confirmada
+            $citaConfirmadaCompletado = $estadoInfo['etapas']['cita_confirmada']['completado'] ?? false;
+            if ($citaConfirmadaCompletado && !isset($currentStates['cita_confirmada'])) {
+                $currentStates['cita_confirmada'] = $now;
+                Log::info("[DetalleVehiculo] Cita confirmada marcada con timestamp: {$now}");
+            }
+            
+            // Verificar cambios en en_trabajo
+            $enTrabajoActivo = $estadoInfo['etapas']['en_trabajo']['activo'] ?? false;
+            $enTrabajoCompletado = $estadoInfo['etapas']['en_trabajo']['completado'] ?? false;
+            
+            if ($enTrabajoActivo || $enTrabajoCompletado) {
+                $currentEnTrabajo = $currentStates['en_trabajo'] ?? [];
+                
+                // Si no existe timestamp y se está activando, agregarlo
+                if (!isset($currentEnTrabajo['timestamp']) && ($enTrabajoActivo || $enTrabajoCompletado)) {
+                    $currentEnTrabajo['timestamp'] = $now;
+                    Log::info("[DetalleVehiculo] En trabajo marcado con timestamp: {$now}");
+                }
+                
+                $currentEnTrabajo['activo'] = $enTrabajoActivo;
+                $currentEnTrabajo['completado'] = $enTrabajoCompletado;
+                $currentStates['en_trabajo'] = $currentEnTrabajo;
+            }
+            
+            // Verificar cambios en trabajo_concluido
+            $trabajoConcluidoCompletado = $estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false;
+            if ($trabajoConcluidoCompletado && !isset($currentStates['trabajo_concluido'])) {
+                $currentStates['trabajo_concluido'] = $now;
+                Log::info("[DetalleVehiculo] Trabajo concluido marcado con timestamp: {$now}");
+            }
+            
+            $appointment->frontend_states = $currentStates;
+            $appointment->save();
+            
+            Log::info("[DetalleVehiculo] Estados frontend guardados en BD para cita: {$c4cUuid}", [
+                'frontend_states' => $currentStates
+            ]);
+            
         } catch (\Exception $e) {
             Log::error("[DetalleVehiculo] Error al guardar estados frontend en BD: " . $e->getMessage());
         }

@@ -52,6 +52,9 @@ class Appointment extends Model
         'center_code',
         // ✅ NUEVO CAMPO PARA ESTADOS FRONTEND
         'frontend_states',
+        // ✅ CAMPOS PARA NO SHOW
+        'no_show',
+        'no_show_at',
     ];
 
     /**
@@ -70,6 +73,8 @@ class Appointment extends Model
         'offer_creation_attempts' => 'integer',
         'rescheduled' => 'integer',
         'frontend_states' => 'array',
+        'no_show' => 'boolean',
+        'no_show_at' => 'datetime',
     ];
 
     /**
@@ -283,6 +288,34 @@ class Appointment extends Model
     }
 
     /**
+     * ✅ NUEVO MÉTODO: Actualizar estado frontend con timestamp automático
+     */
+    public function updateFrontendState(string $state, array $data): void
+    {
+        $states = $this->frontend_states ?? [];
+        
+        // Si es un cambio de estado, agregar timestamp
+        if ($state === 'cita_confirmada' && ($data['completado'] ?? false) && !isset($states['cita_confirmada'])) {
+            $states[$state] = now()->format('Y-m-d H:i:s');
+        } elseif ($state === 'en_trabajo') {
+            // Para en_trabajo, mantener la estructura compleja con timestamp
+            $currentState = $states[$state] ?? [];
+            $states[$state] = array_merge($currentState, $data);
+            
+            // Si se está activando por primera vez, agregar timestamp
+            if (($data['activo'] ?? false) && !isset($currentState['timestamp'])) {
+                $states[$state]['timestamp'] = now()->format('Y-m-d H:i:s');
+            }
+        } else {
+            // Para otros estados, solo actualizar los datos
+            $states[$state] = array_merge($states[$state] ?? [], $data);
+        }
+        
+        $this->frontend_states = $states;
+        $this->save();
+    }
+
+    /**
      * ✅ NUEVO MÉTODO: Verificar si tiene un estado frontend
      */
     public function hasFrontendState(string $state, string $subState = null): bool
@@ -349,21 +382,22 @@ class Appointment extends Model
      */
     public function scopeNoShow($query)
     {
-        return $query->where(function($q) {
-            // Citas que tienen 'cita_confirmada' pero no 'en_trabajo' activo/completado y han pasado más de 10 horas
-            $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL")
-              ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') IS NULL")
-              ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') IS NULL")
-              ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')), '%Y-%m-%d %H:%i:%s'), NOW()) > 10");
-        })->orWhere(function($q) {
-            // O citas que tienen ambos estados pero pasaron más de 10 horas entre ellos
-            $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL")
-              ->where(function($q2) {
-                  $q2->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = true")
-                     ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') = true");
-              })
-              ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')), '%Y-%m-%d %H:%i:%s'), STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.en_trabajo.timestamp')), '%Y-%m-%d %H:%i:%s')) > 10");
-        });
+        return $query->where('no_show', true)
+            ->orWhere(function($q) {
+                // Citas que tienen 'cita_confirmada' pero no 'en_trabajo' activo/completado y han pasado más de 10 horas
+                $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL")
+                  ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') IS NULL")
+                  ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') IS NULL")
+                  ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')), '%Y-%m-%d %H:%i:%s'), NOW()) > 10");
+            })->orWhere(function($q) {
+                // O citas que tienen ambos estados pero pasaron más de 10 horas entre ellos
+                $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL")
+                  ->where(function($q2) {
+                      $q2->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = true")
+                         ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') = true");
+                  })
+                  ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')), '%Y-%m-%d %H:%i:%s'), STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.en_trabajo.timestamp')), '%Y-%m-%d %H:%i:%s')) > 10");
+            });
     }
 
     /**
