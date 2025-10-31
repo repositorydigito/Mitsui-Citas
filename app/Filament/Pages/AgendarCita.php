@@ -5012,39 +5012,28 @@ class AgendarCita extends Page
      */
     public function guardarDatosCliente(): void
     {
-        try {
-            // Validar los datos
             $this->validate([
                 'nombreCliente' => 'required|string|max:255',
                 'apellidoCliente' => 'required|string|max:255',
                 'emailCliente' => 'required|email|max:255',
-                'celularCliente' => 'required|string|max:20',
+                'celularCliente' => ['required', 'digits:9'],
             ], [
                 'nombreCliente.required' => 'El nombre es obligatorio',
                 'apellidoCliente.required' => 'El apellido es obligatorio',
                 'emailCliente.required' => 'El email es obligatorio',
                 'emailCliente.email' => 'El email debe tener un formato válido',
-                'celularCliente.required' => 'El celular es obligatorio',
+                'celularCliente.required' => 'El celular debe tener exactamente 9 números',
             ]);
 
             $user = Auth::user();
             
             if ($user) {
-                // Actualizar los datos del usuario en la base de datos
                 $user->update([
                     'name' => trim($this->nombreCliente . ' ' . $this->apellidoCliente),
                     'email' => $this->emailCliente,
                     'phone' => $this->celularCliente,
                 ]);
 
-                Log::info('[AgendarCita] Datos del cliente actualizados en la base de datos:', [
-                    'user_id' => $user->id,
-                    'nombre_completo' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                ]);
-
-                // Mostrar notificación de éxito
                 \Filament\Notifications\Notification::make()
                     ->title('Datos actualizados')
                     ->body('Tus datos han sido actualizados correctamente.')
@@ -5054,18 +5043,11 @@ class AgendarCita extends Page
 
             $this->editandoDatos = false;
 
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            // Las validaciones se manejan automáticamente por Livewire
-            Log::warning('[AgendarCita] Error de validación al guardar datos del cliente:', $e->errors());
-            
-        } catch (\Exception $e) {
-            Log::error('[AgendarCita] Error al guardar datos del cliente: ' . $e->getMessage());
-            
             \Filament\Notifications\Notification::make()
                 ->title('Error al actualizar')
                 ->body('Hubo un error al actualizar tus datos. Por favor, inténtalo de nuevo.')
                 ->danger()
                 ->send();
-        }
+        
     }
 }

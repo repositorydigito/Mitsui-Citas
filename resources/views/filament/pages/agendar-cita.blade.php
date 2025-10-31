@@ -106,18 +106,25 @@
                 </div>
                 <div>
                     <input
-                        type="tel"
-                        id="celularCliente"
-                        wire:model="celularCliente"
-                        placeholder="Celular"
-                        class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring focus:ring-primary-500 focus:ring-opacity-50 {{ $editandoDatos ? '' : 'bg-gray-100 cursor-not-allowed' }}"
-                        required
-                        maxlength="9"
-                        pattern="[0-9]*"
-                        inputmode="numeric"
-                        oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 9)"
-                        {{ $editandoDatos ? '' : 'readonly disabled' }}
-                    >
+    type="text"
+    id="celularCliente"
+    wire:model="celularCliente"
+    placeholder="Celular"
+    class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring focus:ring-primary-500 focus:ring-opacity-50 {{ $editandoDatos ? '' : 'bg-gray-100 cursor-not-allowed' }}"
+    required
+    maxlength="9"
+    pattern="\d{9}"
+    inputmode="numeric"
+    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 9)"
+    title="El número debe tener exactamente 9 dígitos"
+    {{ $editandoDatos ? '' : 'readonly disabled' }}
+>
+
+                    
+@error('celularCliente')
+        <span class="text-red-500 text-xs">El número debe tener exactamente 9 dígitos</span>
+    @enderror
+
                 </div>
             </div>
             <div class="flex items-center gap-4">

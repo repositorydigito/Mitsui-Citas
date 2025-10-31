@@ -136,7 +136,7 @@ class MiCuenta extends Page
                 'datosEdicion.nombres' => 'required|string|max:100',
                 'datosEdicion.apellidos' => 'required|string|max:100',
                 'datosEdicion.correo' => 'required|email|max:100',
-                'datosEdicion.celular' => 'required|string|max:15',
+                'datosEdicion.celular' => ['required', 'digits:9'],
                 'datosEdicion.tipo_documento' => 'required|string|in:DNI,RUC,CE,PASAPORTE',
                 'datosEdicion.numero_documento' => 'required|string|max:20',
             ]);
