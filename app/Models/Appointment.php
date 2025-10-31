@@ -360,21 +360,26 @@ class Appointment extends Model
 
         $states = $this->frontend_states ?? [];
         
-        // Debe tener estado 'cita_confirmada'
-        if (!isset($states['cita_confirmada'])) {
+        // Debe tener estado 'cita_confirmada' con timestamp
+        if (!isset($states['cita_confirmada']['timestamp'])) {
             return false;
         }
         
-        $citaConfirmadaTime = \Carbon\Carbon::parse($states['cita_confirmada']);
+        $citaConfirmadaTime = \Carbon\Carbon::parse($states['cita_confirmada']['timestamp']);
         
-        // Si no tiene estado 'en_trabajo', verificar si han pasado más de 10 horas
-        if (!isset($states['en_trabajo'])) {
+        // Si no tiene estado 'en_trabajo' activo/completado, verificar si han pasado más de 10 horas
+        if (!isset($states['en_trabajo']) || 
+            (!($states['en_trabajo']['activo'] ?? false) && !($states['en_trabajo']['completado'] ?? false))) {
             return $citaConfirmadaTime->addHours(10)->isPast();
         }
         
         // Si tiene estado 'en_trabajo', verificar si pasaron más de 10 horas entre ambos estados
-        $enTrabajoTime = \Carbon\Carbon::parse($states['en_trabajo']);
-        return $citaConfirmadaTime->diffInHours($enTrabajoTime) > 10;
+        if (isset($states['en_trabajo']['timestamp'])) {
+            $enTrabajoTime = \Carbon\Carbon::parse($states['en_trabajo']['timestamp']);
+            return $citaConfirmadaTime->diffInHours($enTrabajoTime) > 10;
+        }
+        
+        return false;
     }
 
     /**
@@ -385,18 +390,18 @@ class Appointment extends Model
         return $query->where('no_show', true)
             ->orWhere(function($q) {
                 // Citas que tienen 'cita_confirmada' pero no 'en_trabajo' activo/completado y han pasado más de 10 horas
-                $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL")
+                $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp') IS NOT NULL")
                   ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') IS NULL")
                   ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') IS NULL")
-                  ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')), '%Y-%m-%d %H:%i:%s'), NOW()) > 10");
+                  ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')), '%Y-%m-%d %H:%i:%s'), NOW()) > 10");
             })->orWhere(function($q) {
                 // O citas que tienen ambos estados pero pasaron más de 10 horas entre ellos
-                $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL")
+                $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp') IS NOT NULL")
                   ->where(function($q2) {
                       $q2->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = true")
                          ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') = true");
                   })
-                  ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')), '%Y-%m-%d %H:%i:%s'), STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.en_trabajo.timestamp')), '%Y-%m-%d %H:%i:%s')) > 10");
+                  ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')), '%Y-%m-%d %H:%i:%s'), STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.en_trabajo.timestamp')), '%Y-%m-%d %H:%i:%s')) > 10");
             });
     }
 

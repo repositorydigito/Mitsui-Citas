@@ -37,7 +37,7 @@ class MarkNoShowAppointmentsJob implements ShouldQueue
                 AND (
                     (
                         -- CASO 1: Confirmada pero sin trabajo activo/completado en 10h
-                        JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL
+                        JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp') IS NOT NULL
                         AND (
                             JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') IS NULL
                             OR JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = false
@@ -49,7 +49,7 @@ class MarkNoShowAppointmentsJob implements ShouldQueue
                         AND TIMESTAMPDIFF(
                             HOUR,
                             STR_TO_DATE(
-                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')),
+                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')),
                                 '%Y-%m-%d %H:%i:%s'
                             ),
                             NOW()
@@ -58,7 +58,7 @@ class MarkNoShowAppointmentsJob implements ShouldQueue
                     OR
                     (
                         -- CASO 2: Confirmada + trabajo, pero pasaron >10h entre ambos
-                        JSON_EXTRACT(frontend_states, '$.cita_confirmada') IS NOT NULL
+                        JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp') IS NOT NULL
                         AND (
                             JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = true
                             OR JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') = true
@@ -66,7 +66,7 @@ class MarkNoShowAppointmentsJob implements ShouldQueue
                         AND TIMESTAMPDIFF(
                             HOUR,
                             STR_TO_DATE(
-                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada')),
+                                JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')),
                                 '%Y-%m-%d %H:%i:%s'
                             ),
                             STR_TO_DATE(

@@ -1040,21 +1040,32 @@ class DetalleVehiculo extends Page
             $currentStates = $appointment->frontend_states ?? [];
             $now = now()->format('Y-m-d H:i:s');
             
-            // Verificar cambios en cita_confirmada
+            // Procesar cita_confirmada
+            $citaConfirmadaActivo = $estadoInfo['etapas']['cita_confirmada']['activo'] ?? false;
             $citaConfirmadaCompletado = $estadoInfo['etapas']['cita_confirmada']['completado'] ?? false;
-            if ($citaConfirmadaCompletado && !isset($currentStates['cita_confirmada'])) {
-                $currentStates['cita_confirmada'] = $now;
-                Log::info("[DetalleVehiculo] Cita confirmada marcada con timestamp: {$now}");
+            
+            if ($citaConfirmadaActivo || $citaConfirmadaCompletado) {
+                $currentCitaConfirmada = $currentStates['cita_confirmada'] ?? [];
+                
+                // Si no existe timestamp y se está activando/completando, agregarlo
+                if (!isset($currentCitaConfirmada['timestamp']) && ($citaConfirmadaActivo || $citaConfirmadaCompletado)) {
+                    $currentCitaConfirmada['timestamp'] = $now;
+                    Log::info("[DetalleVehiculo] Cita confirmada marcada con timestamp: {$now}");
+                }
+                
+                $currentCitaConfirmada['activo'] = $citaConfirmadaActivo;
+                $currentCitaConfirmada['completado'] = $citaConfirmadaCompletado;
+                $currentStates['cita_confirmada'] = $currentCitaConfirmada;
             }
             
-            // Verificar cambios en en_trabajo
+            // Procesar en_trabajo
             $enTrabajoActivo = $estadoInfo['etapas']['en_trabajo']['activo'] ?? false;
             $enTrabajoCompletado = $estadoInfo['etapas']['en_trabajo']['completado'] ?? false;
             
             if ($enTrabajoActivo || $enTrabajoCompletado) {
                 $currentEnTrabajo = $currentStates['en_trabajo'] ?? [];
                 
-                // Si no existe timestamp y se está activando, agregarlo
+                // Si no existe timestamp y se está activando/completando, agregarlo
                 if (!isset($currentEnTrabajo['timestamp']) && ($enTrabajoActivo || $enTrabajoCompletado)) {
                     $currentEnTrabajo['timestamp'] = $now;
                     Log::info("[DetalleVehiculo] En trabajo marcado con timestamp: {$now}");
@@ -1065,11 +1076,22 @@ class DetalleVehiculo extends Page
                 $currentStates['en_trabajo'] = $currentEnTrabajo;
             }
             
-            // Verificar cambios en trabajo_concluido
+            // Procesar trabajo_concluido
+            $trabajoConcluidoActivo = $estadoInfo['etapas']['trabajo_concluido']['activo'] ?? false;
             $trabajoConcluidoCompletado = $estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false;
-            if ($trabajoConcluidoCompletado && !isset($currentStates['trabajo_concluido'])) {
-                $currentStates['trabajo_concluido'] = $now;
-                Log::info("[DetalleVehiculo] Trabajo concluido marcado con timestamp: {$now}");
+            
+            if ($trabajoConcluidoActivo || $trabajoConcluidoCompletado) {
+                $currentTrabajoConcluido = $currentStates['trabajo_concluido'] ?? [];
+                
+                // Si no existe timestamp y se está activando/completando, agregarlo
+                if (!isset($currentTrabajoConcluido['timestamp']) && ($trabajoConcluidoActivo || $trabajoConcluidoCompletado)) {
+                    $currentTrabajoConcluido['timestamp'] = $now;
+                    Log::info("[DetalleVehiculo] Trabajo concluido marcado con timestamp: {$now}");
+                }
+                
+                $currentTrabajoConcluido['activo'] = $trabajoConcluidoActivo;
+                $currentTrabajoConcluido['completado'] = $trabajoConcluidoCompletado;
+                $currentStates['trabajo_concluido'] = $currentTrabajoConcluido;
             }
             
             $appointment->frontend_states = $currentStates;
