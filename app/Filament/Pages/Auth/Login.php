@@ -111,6 +111,18 @@ class Login extends BaseLogin
 
     public function form(Form $form): Form
     {
+        // Log cuando se construye el formulario
+        $deviceInfo = $this->getDeviceInfo();
+        Log::info('[LOGIN-MOBILE-DEBUG] Formulario de login cargado', [
+            'timestamp' => now()->toDateTimeString(),
+            'is_mobile' => $deviceInfo['is_mobile'],
+            'device_type' => $deviceInfo['device_type'],
+            'os' => $deviceInfo['os'],
+            'browser' => $deviceInfo['browser'],
+            'ip' => $deviceInfo['ip'],
+            'user_agent' => $deviceInfo['user_agent'],
+        ]);
+
         return $form
             ->schema([
                 $this->getDocumentTypeFormComponent(),
