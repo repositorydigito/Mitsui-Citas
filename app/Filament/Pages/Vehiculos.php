@@ -332,7 +332,7 @@ class Vehiculos extends Page
 
             // PASO 2: Solo consultar SAP si NO hay vehículos en BD o se fuerza la sincronización
             $forzarSincronizacion = session()->pull('forzar_sincronizacion_sap', false);
-            
+
             if ($vehiculosDB->isEmpty() || $forzarSincronizacion) {
                 if ($webserviceEnabled && !empty($user?->document_number)) {
                     Log::info("[VehiculosPage] " . ($forzarSincronizacion ? 'Sincronización forzada' : 'BD vacía') . " - Consultando SAP");
@@ -354,9 +354,15 @@ class Vehiculos extends Page
                 Log::info("[VehiculosPage] ✅ Usando vehículos precargados de BD (" . $vehiculosDB->count() . " vehículos) - Saltando consulta SAP para evitar timeout");
             }
 
+            // ✅ NUEVO: Obtener índice de placas disponibles en SAP (con caché)
+            $placasDisponiblesEnSAP = $this->obtenerPlacasDisponiblesEnSAP($user, $codigosMarca);
+
             Log::info("[VehiculosPage] Vehículos BD encontrados para user_id {$user->id}: " . $vehiculosDB->count());
 
-            $vehiculosDB = $vehiculosDB->map(function ($vehicle) {
+            // ✅ Verificar si es cliente comodín (índice especial)
+            $esClienteComodin = isset($placasDisponiblesEnSAP['__COMODIN__']);
+
+            $vehiculosDB = $vehiculosDB->map(function ($vehicle) use ($placasDisponiblesEnSAP, $esClienteComodin) {
                     return [
                         'vhclie' => $vehicle->vehicle_id,
                         'numpla' => $vehicle->license_plate,
@@ -376,6 +382,8 @@ class Vehiculos extends Page
                         'mantenimiento_prepagado_vencimiento' => $vehicle->prepaid_maintenance_expiry,
                         'imagen_url' => $vehicle->image_url,
                         'fuente_datos' => 'BaseDatos_Local',
+                        // ✅ Cliente comodín: habilitar todos | Cliente normal: verificar en índice SAP
+                        'sap_disponible' => $esClienteComodin ? true : isset($placasDisponiblesEnSAP[$vehicle->license_plate]),
                     ];
                 });
 
@@ -431,6 +439,71 @@ class Vehiculos extends Page
         }
 
 
+    }
+
+    /**
+     * Obtener índice de placas disponibles en SAP (con caché de 10 minutos)
+     *
+     * Este método crea un índice optimizado para verificación O(1) de disponibilidad
+     * de vehículos en SAP, evitando consultas repetidas y mejorando rendimiento.
+     *
+     * @param \App\Models\User $user Usuario autenticado
+     * @param array $codigosMarca Códigos de marca a consultar
+     * @return array Índice con formato ['PLACA' => true]
+     */
+    protected function obtenerPlacasDisponiblesEnSAP($user, array $codigosMarca): array
+    {
+        // ✅ CLIENTES COMODÍN: No validar contra SAP, habilitar todos los vehículos
+        if ($user->is_comodin || !$user->hasRealC4cData()) {
+            Log::info("[VehiculosPage] Cliente comodín detectado, habilitando todos los vehículos sin validación SAP");
+            return ['__COMODIN__' => true]; // Índice especial que habilita todos
+        }
+
+        // Si no hay document_number, retornar índice vacío
+        if (empty($user?->document_number)) {
+            Log::info("[VehiculosPage] Usuario sin document_number, índice SAP vacío");
+            return [];
+        }
+
+        // Si webservice está deshabilitado, retornar índice vacío
+        if (!config('vehiculos_webservice.enabled', true)) {
+            Log::info("[VehiculosPage] Webservice SAP deshabilitado, índice SAP vacío");
+            return [];
+        }
+
+        $cacheKey = "sap_placas_disponibles_{$user->document_number}";
+        $cacheDuration = 600; // 10 minutos
+
+        return \Illuminate\Support\Facades\Cache::remember($cacheKey, $cacheDuration, function () use ($user, $codigosMarca) {
+            Log::info("[VehiculosPage] Generando índice de placas SAP (caché 10 min) para documento: {$user->document_number}");
+
+            try {
+                // Consultar SAP
+                $vehiculosSAP = $this->consultarVehiculosSAP($user, $codigosMarca);
+
+                if ($vehiculosSAP->isEmpty()) {
+                    Log::info("[VehiculosPage] SAP no devolvió vehículos, índice vacío");
+                    return [];
+                }
+
+                // Crear índice optimizado: ['PLACA' => true]
+                $indice = $vehiculosSAP
+                    ->pluck('numpla')
+                    ->filter() // Eliminar nulls
+                    ->mapWithKeys(function ($placa) {
+                        return [$placa => true];
+                    })
+                    ->toArray();
+
+                Log::info("[VehiculosPage] Índice SAP generado con " . count($indice) . " placas");
+
+                return $indice;
+
+            } catch (\Exception $e) {
+                Log::error("[VehiculosPage] Error al generar índice SAP: " . $e->getMessage());
+                return [];
+            }
+        });
     }
 
     /**
