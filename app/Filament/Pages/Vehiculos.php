@@ -362,7 +362,15 @@ class Vehiculos extends Page
             // ✅ Verificar si es cliente comodín (índice especial)
             $esClienteComodin = isset($placasDisponiblesEnSAP['__COMODIN__']);
 
-            $vehiculosDB = $vehiculosDB->map(function ($vehicle) use ($placasDisponiblesEnSAP, $esClienteComodin) {
+            // ✅ NUEVO: Agregar sap_disponible a vehículos de SAP (misma lógica que BD local)
+            $vehiculosSAP = $vehiculosSAP->map(function ($vehiculo) use ($placasDisponiblesEnSAP, $esClienteComodin) {
+                // Cliente comodín: habilitar todos | Cliente normal: verificar en índice SAP
+                $vehiculo['sap_disponible'] = $esClienteComodin ? true : isset($placasDisponiblesEnSAP[$vehiculo['numpla']]);
+                return $vehiculo;
+            });
+
+            // Mapear vehículos de BD local a formato estándar (sin asignar sap_disponible aún)
+            $vehiculosDB = $vehiculosDB->map(function ($vehicle) {
                     return [
                         'vhclie' => $vehicle->vehicle_id,
                         'numpla' => $vehicle->license_plate,
@@ -382,10 +390,68 @@ class Vehiculos extends Page
                         'mantenimiento_prepagado_vencimiento' => $vehicle->prepaid_maintenance_expiry,
                         'imagen_url' => $vehicle->image_url,
                         'fuente_datos' => 'BaseDatos_Local',
-                        // ✅ Cliente comodín: habilitar todos | Cliente normal: verificar en índice SAP
-                        'sap_disponible' => $esClienteComodin ? true : isset($placasDisponiblesEnSAP[$vehicle->license_plate]),
+                        'sap_disponible' => null, // Se asignará después con validación C4C batch
                     ];
                 });
+
+            // ✅ VALIDACIÓN C4C BATCH: Solo para vehículos BD que necesitan validación
+            if (!$esClienteComodin && $vehiculosDB->isNotEmpty()) {
+                Log::info("[VehiculosPage] Iniciando validación C4C batch para vehículos BD Local");
+
+                // Identificar placas que NO están en índice SAP (necesitan validación C4C)
+                $placasParaValidar = $vehiculosDB
+                    ->filter(function($v) use ($placasDisponiblesEnSAP) {
+                        return !isset($placasDisponiblesEnSAP[$v['numpla']]);
+                    })
+                    ->pluck('numpla')
+                    ->unique()
+                    ->values()
+                    ->toArray();
+
+                Log::info("[VehiculosPage] Placas a validar en C4C: " . count($placasParaValidar));
+
+                $placasEnC4C = [];
+                if (!empty($placasParaValidar)) {
+                    try {
+                        // UNA consulta batch para todas las placas
+                        $vehicleService = app(\App\Services\C4C\VehicleService::class);
+                        $resultadoBatch = $vehicleService->obtenerTipoValorTrabajoPorPlacas($placasParaValidar);
+
+                        // Crear índice de placas encontradas en C4C
+                        $placasEnC4C = array_keys($resultadoBatch);
+                        Log::info("[VehiculosPage] Placas encontradas en C4C: " . count($placasEnC4C));
+                    } catch (\Exception $e) {
+                        Log::error("[VehiculosPage] Error en validación C4C batch: " . $e->getMessage());
+                        // Continuar sin validación C4C (habilitar todos por defecto)
+                    }
+                }
+
+                // Asignar sap_disponible según validación
+                $vehiculosDB = $vehiculosDB->map(function ($v) use ($placasDisponiblesEnSAP, $placasEnC4C) {
+                    if (isset($placasDisponiblesEnSAP[$v['numpla']])) {
+                        // Caso A: Existe en SAP Y le pertenece
+                        $v['sap_disponible'] = true;
+                    } elseif (in_array($v['numpla'], $placasEnC4C)) {
+                        // Caso C: Existe en C4C pero NO le pertenece (pertenece a otro usuario)
+                        $v['sap_disponible'] = false;
+                        Log::debug("[VehiculosPage] Vehículo {$v['numpla']} existe en C4C pero no le pertenece al usuario - Deshabilitado");
+                    } else {
+                        // Caso B: NO existe en C4C
+                        $v['sap_disponible'] = true;
+                    }
+                    return $v;
+                });
+
+                Log::info("[VehiculosPage] Validación C4C completada para vehículos BD Local");
+            } else {
+                // Cliente comodín o sin vehículos BD: habilitar todos
+                $vehiculosDB = $vehiculosDB->map(function ($v) use ($esClienteComodin, $placasDisponiblesEnSAP) {
+                    $v['sap_disponible'] = $esClienteComodin ? true : isset($placasDisponiblesEnSAP[$v['numpla']]);
+                    return $v;
+                });
+
+                Log::info("[VehiculosPage] " . ($esClienteComodin ? "Cliente comodín: todos los vehículos BD habilitados" : "Sin vehículos BD o validación no necesaria"));
+            }
 
             // Log detallado para diagnóstico
             Log::info("[VehiculosPage] Vehículos obtenidos - SAP: " . $vehiculosSAP->count() . ", BD Local: " . $vehiculosDB->count());
