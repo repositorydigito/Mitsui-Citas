@@ -1044,55 +1044,79 @@ class DetalleVehiculo extends Page
             $citaConfirmadaActivo = $estadoInfo['etapas']['cita_confirmada']['activo'] ?? false;
             $citaConfirmadaCompletado = $estadoInfo['etapas']['cita_confirmada']['completado'] ?? false;
             
-            if ($citaConfirmadaActivo || $citaConfirmadaCompletado) {
-                $currentCitaConfirmada = $currentStates['cita_confirmada'] ?? [];
+            $currentCitaConfirmada = $currentStates['cita_confirmada'] ?? [];
+            $previousActivo = $currentCitaConfirmada['activo'] ?? false;
+            $previousCompletado = $currentCitaConfirmada['completado'] ?? false;
+            
+            // Actualizar timestamp si hay cambio de estado o es la primera vez
+            if (!isset($currentCitaConfirmada['timestamp']) || 
+                $citaConfirmadaActivo != $previousActivo || 
+                $citaConfirmadaCompletado != $previousCompletado) {
                 
-                // Si no existe timestamp y se está activando/completando, agregarlo
-                if (!isset($currentCitaConfirmada['timestamp']) && ($citaConfirmadaActivo || $citaConfirmadaCompletado)) {
+                if ($citaConfirmadaActivo || $citaConfirmadaCompletado) {
                     $currentCitaConfirmada['timestamp'] = $now;
-                    Log::info("[DetalleVehiculo] Cita confirmada marcada con timestamp: {$now}");
+                    Log::info("[DetalleVehiculo] Cita confirmada actualizada con timestamp: {$now}", [
+                        'cambio_activo' => "{$previousActivo} -> {$citaConfirmadaActivo}",
+                        'cambio_completado' => "{$previousCompletado} -> {$citaConfirmadaCompletado}"
+                    ]);
                 }
-                
-                $currentCitaConfirmada['activo'] = $citaConfirmadaActivo;
-                $currentCitaConfirmada['completado'] = $citaConfirmadaCompletado;
-                $currentStates['cita_confirmada'] = $currentCitaConfirmada;
             }
+            
+            $currentCitaConfirmada['activo'] = $citaConfirmadaActivo;
+            $currentCitaConfirmada['completado'] = $citaConfirmadaCompletado;
+            $currentStates['cita_confirmada'] = $currentCitaConfirmada;
             
             // Procesar en_trabajo
             $enTrabajoActivo = $estadoInfo['etapas']['en_trabajo']['activo'] ?? false;
             $enTrabajoCompletado = $estadoInfo['etapas']['en_trabajo']['completado'] ?? false;
             
-            if ($enTrabajoActivo || $enTrabajoCompletado) {
-                $currentEnTrabajo = $currentStates['en_trabajo'] ?? [];
+            $currentEnTrabajo = $currentStates['en_trabajo'] ?? [];
+            $previousEnTrabajoActivo = $currentEnTrabajo['activo'] ?? false;
+            $previousEnTrabajoCompletado = $currentEnTrabajo['completado'] ?? false;
+            
+            // Actualizar timestamp si hay cambio de estado o es la primera vez
+            if (!isset($currentEnTrabajo['timestamp']) || 
+                $enTrabajoActivo != $previousEnTrabajoActivo || 
+                $enTrabajoCompletado != $previousEnTrabajoCompletado) {
                 
-                // Si no existe timestamp y se está activando/completando, agregarlo
-                if (!isset($currentEnTrabajo['timestamp']) && ($enTrabajoActivo || $enTrabajoCompletado)) {
+                if ($enTrabajoActivo || $enTrabajoCompletado) {
                     $currentEnTrabajo['timestamp'] = $now;
-                    Log::info("[DetalleVehiculo] En trabajo marcado con timestamp: {$now}");
+                    Log::info("[DetalleVehiculo] En trabajo actualizado con timestamp: {$now}", [
+                        'cambio_activo' => "{$previousEnTrabajoActivo} -> {$enTrabajoActivo}",
+                        'cambio_completado' => "{$previousEnTrabajoCompletado} -> {$enTrabajoCompletado}"
+                    ]);
                 }
-                
-                $currentEnTrabajo['activo'] = $enTrabajoActivo;
-                $currentEnTrabajo['completado'] = $enTrabajoCompletado;
-                $currentStates['en_trabajo'] = $currentEnTrabajo;
             }
+            
+            $currentEnTrabajo['activo'] = $enTrabajoActivo;
+            $currentEnTrabajo['completado'] = $enTrabajoCompletado;
+            $currentStates['en_trabajo'] = $currentEnTrabajo;
             
             // Procesar trabajo_concluido
             $trabajoConcluidoActivo = $estadoInfo['etapas']['trabajo_concluido']['activo'] ?? false;
             $trabajoConcluidoCompletado = $estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false;
             
-            if ($trabajoConcluidoActivo || $trabajoConcluidoCompletado) {
-                $currentTrabajoConcluido = $currentStates['trabajo_concluido'] ?? [];
+            $currentTrabajoConcluido = $currentStates['trabajo_concluido'] ?? [];
+            $previousTrabajoActivo = $currentTrabajoConcluido['activo'] ?? false;
+            $previousTrabajoCompletado = $currentTrabajoConcluido['completado'] ?? false;
+            
+            // Actualizar timestamp si hay cambio de estado o es la primera vez
+            if (!isset($currentTrabajoConcluido['timestamp']) || 
+                $trabajoConcluidoActivo != $previousTrabajoActivo || 
+                $trabajoConcluidoCompletado != $previousTrabajoCompletado) {
                 
-                // Si no existe timestamp y se está activando/completando, agregarlo
-                if (!isset($currentTrabajoConcluido['timestamp']) && ($trabajoConcluidoActivo || $trabajoConcluidoCompletado)) {
+                if ($trabajoConcluidoActivo || $trabajoConcluidoCompletado) {
                     $currentTrabajoConcluido['timestamp'] = $now;
-                    Log::info("[DetalleVehiculo] Trabajo concluido marcado con timestamp: {$now}");
+                    Log::info("[DetalleVehiculo] Trabajo concluido actualizado con timestamp: {$now}", [
+                        'cambio_activo' => "{$previousTrabajoActivo} -> {$trabajoConcluidoActivo}",
+                        'cambio_completado' => "{$previousTrabajoCompletado} -> {$trabajoConcluidoCompletado}"
+                    ]);
                 }
-                
-                $currentTrabajoConcluido['activo'] = $trabajoConcluidoActivo;
-                $currentTrabajoConcluido['completado'] = $trabajoConcluidoCompletado;
-                $currentStates['trabajo_concluido'] = $currentTrabajoConcluido;
             }
+            
+            $currentTrabajoConcluido['activo'] = $trabajoConcluidoActivo;
+            $currentTrabajoConcluido['completado'] = $trabajoConcluidoCompletado;
+            $currentStates['trabajo_concluido'] = $currentTrabajoConcluido;
             
             $appointment->frontend_states = $currentStates;
             $appointment->save();
