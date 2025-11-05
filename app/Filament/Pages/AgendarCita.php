@@ -2478,7 +2478,7 @@ class AgendarCita extends Page
                 'vehicle_plate' => $vehicle->license_plate,
                 'customer_name' => $this->nombreCliente . ' ' . $this->apellidoCliente,
                 'notes' => $this->generarComentarioCompleto() ?: null,
-                'express' => strpos($appointment->service_mode, 'express') !== false,
+                'express' => strpos($appointment->service_mode, 'express') !== false ? 'true' : 'false',
             ];
 
             $appointmentData = [
@@ -4872,7 +4872,7 @@ class AgendarCita extends Page
             'vehicle_plate' => $vehicle->license_plate,
             'customer_name' => $this->nombreCliente . ' ' . $this->apellidoCliente,
             'notes' => $this->generarComentarioCompleto() ?: null,
-            'express' => strpos($appointment->service_mode, 'express') !== false,
+            'express' => strpos($appointment->service_mode, 'express') !== false ? 'true' : 'false',
         ];
 
         $appointmentData = [
