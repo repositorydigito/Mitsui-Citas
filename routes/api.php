@@ -124,3 +124,46 @@ Route::prefix('sync')->group(function () {
     });
 });
 
+/*
+|--------------------------------------------------------------------------
+| API v1 Routes - Agent IA
+|--------------------------------------------------------------------------
+| Endpoints para el agente de IA conversacional
+*/
+
+Route::prefix('v1')->group(function () {
+    // Health Check (sin autenticación)
+    Route::get('/health', 'App\Http\Controllers\Api\V1\HealthController@check');
+
+    // Autenticación
+    Route::post('/auth/token', 'App\Http\Controllers\Api\V1\AuthController@generateToken');
+
+    // Rutas protegidas con API token
+    Route::middleware('auth.api.token')->group(function () {
+        // Validación de cliente y vehículo
+        Route::post('/customers/validate', 'App\Http\Controllers\Api\V1\CustomerValidationController@validate');
+        Route::get('/customers/{document}/vehicles', 'App\Http\Controllers\Api\V1\CustomerValidationController@getVehicles');
+
+        // Locales
+        Route::get('/premises', 'App\Http\Controllers\Api\V1\PremiseController@index');
+        Route::get('/premises/{code}', 'App\Http\Controllers\Api\V1\PremiseController@show');
+
+        // Disponibilidad
+        Route::post('/availability/check', 'App\Http\Controllers\Api\V1\AvailabilityController@check');
+
+        // Tipos de mantenimiento
+        Route::get('/maintenance-types', 'App\Http\Controllers\Api\V1\MaintenanceTypeController@index');
+
+        // Servicios adicionales
+        Route::get('/additional-services', 'App\Http\Controllers\Api\V1\AdditionalServiceController@index');
+
+        // Campañas
+        Route::get('/campaigns', 'App\Http\Controllers\Api\V1\CampaignController@index');
+
+        // Citas
+        Route::post('/appointments', 'App\Http\Controllers\Api\V1\AppointmentController@store');
+        Route::get('/appointments/{appointmentNumber}', 'App\Http\Controllers\Api\V1\AppointmentController@show');
+        Route::get('/customers/{document}/appointments', 'App\Http\Controllers\Api\V1\AppointmentController@customerAppointments');
+    });
+});
+
