@@ -12,12 +12,8 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->job(new \App\Jobs\MarkNoShowAppointmentsJob)->hourly();
-        // Enviar recordatorios de citas todos los días a las 9:00 AM
-        $schedule->command('citas:enviar-recordatorios')
-                 ->dailyAt('09:00')
-                 ->withoutOverlapping()
-                 ->runInBackground();
+        // Los jobs están programados en routes/console.php
+        // Este método se mantiene vacío
     }
 
     /**

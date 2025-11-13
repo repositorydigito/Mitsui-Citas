@@ -2120,8 +2120,12 @@ class AgendarCita extends Page
 
         // Validación básica para el paso 1
         if ($this->pasoActual == 1) {
-            // Aquí podríamos agregar validaciones para los campos
-            // Por ahora simplemente avanzamos al siguiente paso
+            // Validar todos los datos del cliente antes de continuar
+            if (!$this->validarDatosCliente()) {
+                return; // No continuar si la validación falla
+            }
+            
+            // Si la validación pasa, avanzar al siguiente paso
             $this->pasoActual++;
         }
         // En el paso 2, guardamos la cita y avanzamos al paso 3
@@ -5005,6 +5009,100 @@ class AgendarCita extends Page
         $this->editandoDatos = false;
         
         Log::info('[AgendarCita] Edición de datos cancelada');
+    }
+
+    /**
+     * Valida todos los datos del cliente antes de continuar
+     */
+    protected function validarDatosCliente(): bool
+    {
+        // Validar que todos los campos estén completos
+        if (empty(trim($this->nombreCliente))) {
+            \Filament\Notifications\Notification::make()
+                ->title('Nombre requerido')
+                ->body('Por favor, completa tu nombre antes de continuar.')
+                ->danger()
+                ->send();
+            return false;
+        }
+
+        if (empty(trim($this->apellidoCliente))) {
+            \Filament\Notifications\Notification::make()
+                ->title('Apellido requerido')
+                ->body('Por favor, completa tu apellido antes de continuar.')
+                ->danger()
+                ->send();
+            return false;
+        }
+
+        if (empty(trim($this->emailCliente)) || !filter_var($this->emailCliente, FILTER_VALIDATE_EMAIL)) {
+            \Filament\Notifications\Notification::make()
+                ->title('Email inválido')
+                ->body('Por favor, ingresa un email válido antes de continuar.')
+                ->danger()
+                ->send();
+            return false;
+        }
+
+        // Validar específicamente el celular
+        if (!$this->validarCelular()) {
+            return false;
+        }
+
+        Log::info('[AgendarCita] Validación completa de datos del cliente exitosa');
+        return true;
+    }
+
+    /**
+     * Valida que el número de celular tenga exactamente 9 dígitos
+     */
+    protected function validarCelular(): bool
+    {
+        // Limpiar el número de celular (eliminar espacios y caracteres no numéricos)
+        $celularLimpio = preg_replace('/[^0-9]/', '', $this->celularCliente);
+        
+        // Verificar que tenga exactamente 9 dígitos
+        if (strlen($celularLimpio) !== 9) {
+            \Filament\Notifications\Notification::make()
+                ->title('Número de celular inválido')
+                ->body('El número de celular debe tener exactamente 9 dígitos. Por favor, edita tus datos y corrige el número.')
+                ->danger()
+                ->persistent()
+                ->send();
+            
+            Log::warning('[AgendarCita] Validación de celular falló', [
+                'celular_original' => $this->celularCliente,
+                'celular_limpio' => $celularLimpio,
+                'longitud' => strlen($celularLimpio)
+            ]);
+            
+            return false;
+        }
+        
+        // Actualizar el campo con el número limpio
+        $this->celularCliente = $celularLimpio;
+        
+        Log::info('[AgendarCita] Validación de celular exitosa', [
+            'celular' => $this->celularCliente
+        ]);
+        
+        return true;
+    }
+
+    /**
+     * Método que se ejecuta cuando cambia el valor del celular
+     * Limpia automáticamente el número para mantener solo dígitos
+     */
+    public function updatedCelularCliente($value): void
+    {
+        // Limpiar automáticamente el número (solo dígitos, máximo 9)
+        $this->celularCliente = substr(preg_replace('/[^0-9]/', '', $value), 0, 9);
+        
+        Log::debug('[AgendarCita] Celular actualizado', [
+            'valor_original' => $value,
+            'valor_limpio' => $this->celularCliente,
+            'longitud' => strlen($this->celularCliente)
+        ]);
     }
 
     /**

@@ -109,8 +109,8 @@
     type="text"
     id="celularCliente"
     wire:model="celularCliente"
-    placeholder="Celular"
-    class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring focus:ring-primary-500 focus:ring-opacity-50 {{ $editandoDatos ? '' : 'bg-gray-100 cursor-not-allowed' }}"
+    placeholder="Celular (9 dígitos)"
+    class="w-full rounded-md shadow-sm focus:ring focus:ring-opacity-50 {{ $editandoDatos ? '' : 'bg-gray-100 cursor-not-allowed' }} {{ strlen(preg_replace('/[^0-9]/', '', $celularCliente)) === 9 ? 'border-green-300 focus:border-green-500 focus:ring-green-500' : 'border-red-300 focus:border-red-500 focus:ring-red-500' }}"
     required
     maxlength="9"
     pattern="\d{9}"
@@ -120,9 +120,27 @@
     {{ $editandoDatos ? '' : 'readonly disabled' }}
 >
 
+                    <!-- Indicador visual del estado del celular -->
+                    <div class="mt-1 flex items-center text-xs">
+                        @if(strlen(preg_replace('/[^0-9]/', '', $celularCliente)) === 9)
+                            <span class="text-green-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                                </svg>
+                                Número válido ({{ strlen(preg_replace('/[^0-9]/', '', $celularCliente)) }}/9 dígitos)
+                            </span>
+                        @else
+                            <span class="text-red-600 flex items-center">
+                                <svg class="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                                </svg>
+                                Faltan {{ 9 - strlen(preg_replace('/[^0-9]/', '', $celularCliente)) }} dígitos ({{ strlen(preg_replace('/[^0-9]/', '', $celularCliente)) }}/9)
+                            </span>
+                        @endif
+                    </div>
                     
 @error('celularCliente')
-        <span class="text-red-500 text-xs">El número debe tener exactamente 9 dígitos</span>
+        <span class="text-red-500 text-xs mt-1 block">{{ $message }}</span>
     @enderror
 
                 </div>
@@ -896,16 +914,43 @@
                         Volver
                     </div>
                 </button>
-                <button type="button" wire:click="continuar" class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-success-500" wire:loading.attr="disabled">
-                    <span wire:loading.remove wire:target="continuar">{{ $editMode ? 'Reprogramar Cita' : 'Agendar' }}</span>
-                    <span wire:loading wire:target="continuar" class="flex items-center">
-                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Procesando...
-                    </span>
-                </button>
+                @php
+                    $celularValido = strlen(preg_replace('/[^0-9]/', '', $celularCliente)) === 9;
+                @endphp
+                
+                <div class="flex flex-col items-center">
+                    <button 
+                        type="button" 
+                        wire:click="continuar" 
+                        class="px-6 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 {{ $celularValido ? 'bg-primary-600 hover:bg-primary-700 focus:ring-success-500' : 'bg-gray-400 cursor-not-allowed' }}"
+                        wire:loading.attr="disabled"
+                        {{ $celularValido ? '' : 'disabled' }}
+                    >
+                        <span wire:loading.remove wire:target="continuar">
+                            @if($celularValido)
+                                {{ $editMode ? 'Reprogramar Cita' : 'Agendar' }}
+                            @else
+                                Corrige el celular para continuar
+                            @endif
+                        </span>
+                        <span wire:loading wire:target="continuar" class="flex items-center">
+                            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Procesando...
+                        </span>
+                    </button>
+                    
+                    @if(!$celularValido)
+                        <p class="text-red-600 text-xs mt-2 text-center">
+                            <svg class="w-4 h-4 inline mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+                            </svg>
+                            Debes corregir el número de celular antes de continuar
+                        </p>
+                    @endif
+                </div>
             </div>
         </div>
 

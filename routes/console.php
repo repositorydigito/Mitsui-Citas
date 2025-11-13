@@ -15,5 +15,15 @@ Schedule::job(new UpdateComodinUsersC4CIdJob)->everyMinute();
 // Comandos críticos cada minuto
 Schedule::command('appointment:sync --all')->everyMinute();
 Schedule::command('appointments:update-package-ids --sync')->everyMinute();
+
+// Job para marcar citas como no-show cada hora
+Schedule::command('appointments:mark-no-show')->hourly();
+
+// Enviar recordatorios de citas todos los días a las 9:00 AM
+Schedule::command('citas:enviar-recordatorios')
+        ->dailyAt('09:00')
+        ->withoutOverlapping()
+        ->runInBackground();
+
 // DESACTIVADO: Comando consume muchos recursos
 // Schedule::command('vehicles:update-tipo-valor-trabajo')->everyMinute();
