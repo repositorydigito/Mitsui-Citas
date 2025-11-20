@@ -4527,11 +4527,10 @@ class AgendarCita extends Page
                 ->send(new CitaEditada($appointment, $datosCliente, $datosVehiculo, $cambiosRealizados));
 
              // Enviar notificación WhatsApp de reprogramación
-            app(AppointmentWhatsappService::class)->sendAppointmentCreated(
+            app(AppointmentWhatsappService::class)->sendAppointmentRescheduled(
                 $appointment,
                 $datosCliente,
                 $datosVehiculo,
-                config('services.twilio.register_rescheduled'),
                 $cambiosRealizados
             );
 
