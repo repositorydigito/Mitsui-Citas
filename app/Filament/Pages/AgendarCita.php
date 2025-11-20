@@ -5,6 +5,7 @@ namespace App\Filament\Pages;
 use App\Jobs\EnviarCitaC4CJob;
 use App\Jobs\ProcessAppointmentAfterCreationJob;
 use App\Mail\SolicitudInformacionPopup;
+use App\Services\Notifications\AppointmentWhatsappService;
 use App\Mail\CitaCreada;
 use App\Mail\CitaEditada;
 use App\Mail\CitaCancelada;
@@ -368,14 +369,14 @@ class AgendarCita extends Page
         // YAGNI: Mantener TODOS los slots pero actualizar disponibilidad si hay citas locales adicionales
         return array_map(function ($slot) use ($citasAgendadas) {
             $tieneCtaLocal = in_array($slot['start_time_formatted'], $citasAgendadas);
-            
+
             // Si el slot ya está marcado como no disponible por C4C, mantenerlo
             // Si hay cita local adicional, marcarlo como no disponible
             if ($tieneCtaLocal && ($slot['is_available'] ?? true)) {
                 $slot['is_available'] = false;
                 $slot['local_appointment_conflict'] = true;
             }
-            
+
             return $slot;
         }, $slots);
     }
@@ -384,17 +385,17 @@ class AgendarCita extends Page
     {
         // ✅ KISS: Guardar slots completos para uso posterior, pero devolver estructura compatible
         $this->slotsCompletos = $slots; // Guardar slots completos con is_available
-        
+
         // YAGNI: Por ahora mantener compatibilidad con código existente
         $horarios = [];
         foreach ($slots as $slot) {
             $horarios[] = date('H:i', strtotime($slot['start_time_formatted']));
         }
-        
+
         // Eliminar horarios duplicados
         $horarios = array_unique($horarios);
         sort($horarios);
-        
+
         return array_values($horarios);
     }
 
@@ -419,7 +420,7 @@ class AgendarCita extends Page
             Log::warning('⚠️ [VISTA] No hay horarios disponibles para convertir');
             return;
         }
-        
+
         if (empty($this->slotsCompletos)) {
             Log::warning('⚠️ [VISTA] slotsCompletos está vacío, aplicando estructura básica');
             $this->aplicarEstructuraBasica();
@@ -427,7 +428,7 @@ class AgendarCita extends Page
         }
 
         $horariosConDisponibilidad = [];
-        
+
         foreach ($this->horariosDisponibles as $hora) {
             // Buscar el slot correspondiente en slotsCompletos
             $slotCorrespondiente = null;
@@ -473,7 +474,7 @@ class AgendarCita extends Page
     protected function aplicarEstructuraBasica(): void
     {
         $horariosConEstructura = [];
-        
+
         foreach ($this->horariosDisponibles as $horario) {
             // ✅ FIX: Detectar si ya tiene estructura o es string simple
             if (is_array($horario)) {
@@ -490,12 +491,12 @@ class AgendarCita extends Page
                 ];
             }
         }
-        
+
         Log::info('✅ [VISTA] Estructura básica aplicada', [
             'horarios_procesados' => count($horariosConEstructura),
             'horarios_originales' => count($this->horariosDisponibles)
         ]);
-        
+
         $this->horariosDisponibles = $horariosConEstructura;
     }
 
@@ -557,7 +558,7 @@ class AgendarCita extends Page
             if (!empty($this->localSeleccionado) && isset($this->locales[$this->localSeleccionado]['id'])) {
                 $localId = $this->locales[$this->localSeleccionado]['id'];
                 $interval = \App\Models\Interval::where('local_id', $localId)->first();
-                
+
                 if ($interval) {
                     $this->minReservationTime = $interval->min_reservation_time;
                     $this->minTimeUnit = $interval->min_time_unit;
@@ -578,7 +579,7 @@ class AgendarCita extends Page
 
             // Fallback: Obtener la configuración general (primer intervalo disponible)
             $interval = \App\Models\Interval::query()->first();
-            
+
             if ($interval) {
                 $this->minReservationTime = $interval->min_reservation_time;
                 $this->minTimeUnit = $interval->min_time_unit;
@@ -602,7 +603,7 @@ class AgendarCita extends Page
             }
         } catch (\Exception $e) {
             Log::error('[AgendarCita] Error al cargar configuración de intervalos: ' . $e->getMessage());
-            
+
             // Valores por defecto en caso de error
             $this->minReservationTime = 1;
             $this->minTimeUnit = 'days';
@@ -689,7 +690,7 @@ class AgendarCita extends Page
 
             // PRIORIZAR SAP: Intentar cargar desde SAP primero para obtener el campo NUMMOT
             Log::info('[AgendarCita] 🚀 Intentando cargar vehículo desde SAP primero para obtener NUMMOT...');
-            
+
             try {
                 $service = app(VehiculoSoapService::class);
 
@@ -714,24 +715,24 @@ class AgendarCita extends Page
                 foreach ($vehiculos as $index => $veh) {
                     Log::info("[AgendarCita] - Vehículo #{$index}: ID={$veh['vhclie']}, Placa={$veh['numpla']}, NUMMOT={$veh['nummot']}");
                 }
-                
+
                 // Buscar el vehículo por ID (puede ser placa o vhclie)
                 $vehiculoEncontradoSoap = $vehiculos->first(function ($vehiculo) use ($vehiculoId) {
                     $coincidePlaca = strtoupper($vehiculo['numpla']) == strtoupper($vehiculoId);
                     $coincideId = $vehiculo['vhclie'] == $vehiculoId;
-                    
+
                     Log::info("[AgendarCita] 🔍 Comparando vehículo: ID={$vehiculo['vhclie']}, Placa={$vehiculo['numpla']}, NUMMOT={$vehiculo['nummot']}");
                     Log::info("[AgendarCita] - Buscando: '{$vehiculoId}'");
                     Log::info("[AgendarCita] - Coincide placa: " . ($coincidePlaca ? 'SÍ' : 'NO'));
                     Log::info("[AgendarCita] - Coincide ID: " . ($coincideId ? 'SÍ' : 'NO'));
-                    
+
                     return $coincidePlaca || $coincideId;
                 });
 
                 if ($vehiculoEncontradoSoap) {
                     // Usar NUMMOT real de SAP si está disponible, sino usar extracción temporal del MODVER
                     $nummotFinal = '';
-                    
+
                     if (!empty($vehiculoEncontradoSoap['nummot'])) {
                         // USAR NUMMOT REAL DE SAP (PREFERIDO)
                         $nummotFinal = $vehiculoEncontradoSoap['nummot'];
@@ -741,7 +742,7 @@ class AgendarCita extends Page
                         $nummotFinal = $this->extraerCodigoMotorDeModver($vehiculoEncontradoSoap['modver'] ?? '');
                         Log::warning("[AgendarCita] ⚠️ NUMMOT vacío en SAP, usando extracción temporal del MODVER '{$vehiculoEncontradoSoap['modver']}': '{$nummotFinal}'");
                     }
-                    
+
                     // Obtener tipo_valor_trabajo desde BD local o C4C
                     $tipoValorTrabajo = null;
                     try {
@@ -771,11 +772,11 @@ class AgendarCita extends Page
                         'tipo_valor_trabajo' => $tipoValorTrabajo,
                         'nummot' => $nummotFinal, // Campo NUMMOT real de SAP o extraído del MODVER
                     ];
-                    
+
                     Log::info('[AgendarCita] ✅ Vehículo encontrado en SAP con NUMMOT:', $this->vehiculo);
                 } else {
                     Log::warning("[AgendarCita] Vehículo no encontrado en SAP. Intentando base de datos local...");
-                    
+
                     // FALLBACK: Si no se encuentra en SAP, buscar en base de datos local
                     $vehiculoEncontrado = Vehicle::where('license_plate', $vehiculoId)
                         ->orWhere('vehicle_id', $vehiculoId)
@@ -803,7 +804,7 @@ class AgendarCita extends Page
                 }
             } catch (\Exception $e) {
                 Log::error('[AgendarCita] Error al cargar datos del vehículo desde SAP: ' . $e->getMessage());
-                
+
                 // FALLBACK: En caso de error con SAP, intentar base de datos local
                 $vehiculoEncontrado = Vehicle::where('license_plate', $vehiculoId)
                     ->orWhere('vehicle_id', $vehiculoId)
@@ -875,7 +876,7 @@ class AgendarCita extends Page
         if ($vehiculoId) {
             $this->validarVehiculo($vehiculoId);
         }
-        
+
         // Recargar servicios filtrados por marca después de cargar el vehículo
         $this->recargarServiciosPorMarca();
     }
@@ -889,17 +890,17 @@ class AgendarCita extends Page
             if (!empty($this->vehiculo['marca'])) {
                 $marcaVehiculo = strtoupper(trim($this->vehiculo['marca']));
                 Log::info("[AgendarCita] Recargando servicios filtrados por marca: {$marcaVehiculo}");
-                
+
                 // Recargar tipos de mantenimiento
                 $this->cargarTiposMantenimiento();
-                
+
                 // Recargar servicios adicionales
                 $this->cargarServiciosAdicionales();
                 $this->cargarServiciosAdicionalesDisponibles();
-                
+
                 // Recargar campañas
                 $this->cargarCampanas();
-                
+
                 Log::info("[AgendarCita] Servicios recargados por marca {$marcaVehiculo}:");
                 Log::info("- Tipos de mantenimiento: " . count($this->tiposMantenimientoDisponibles));
                 Log::info("- Servicios adicionales: " . count($this->serviciosAdicionalesDisponibles));
@@ -1135,16 +1136,16 @@ class AgendarCita extends Page
         // Cargar servicios adicionales del maestro
         try {
             $query = AdditionalService::where('is_active', true);
-            
+
             // Filtrar por marca del vehículo si está disponible
             if (!empty($this->vehiculo['marca'])) {
                 $marcaVehiculo = strtoupper(trim($this->vehiculo['marca']));
                 Log::info("[AgendarCita] Filtrando servicios adicionales del maestro por marca: {$marcaVehiculo}");
-                
+
                 // Usar el nuevo scope para filtrar por marca en JSON
                 $query->porMarca($marcaVehiculo);
             }
-            
+
             $serviciosAdicionales = $query->get();
             foreach ($serviciosAdicionales as $servicio) {
                 $this->opcionesServiciosAdicionales['servicio_' . $servicio->id] = $servicio->name;
@@ -1165,11 +1166,11 @@ class AgendarCita extends Page
             Log::info("[AgendarCita] Datos del vehículo actual:", $this->vehiculo);
             Log::info("[AgendarCita] Local seleccionado: {$this->localSeleccionado}");
             Log::info("[AgendarCita] Tipo de mantenimiento: {$this->tipoMantenimiento}");
-            
+
             // Verificar específicamente el campo NUMMOT
             $nummot = $this->vehiculo['nummot'] ?? '';
             Log::info("[AgendarCita] 🔍 Campo NUMMOT del vehículo: '{$nummot}'");
-            
+
             if (!empty($nummot)) {
                 $codigoMotorExtraido = $this->extraerCodigoMotor($nummot);
                 Log::info("[AgendarCita] 🔧 Código de motor extraído: '{$codigoMotorExtraido}'");
@@ -1190,7 +1191,7 @@ class AgendarCita extends Page
 
             if ($expressDisponible) {
                 Log::info("[AgendarCita] ✅ Express está disponible! Obteniendo tipo de servicio...");
-                
+
                 // --- Lógica igual a esExpressDisponible para obtener el type correcto ---
                 $nombreLocal = '';
                 try {
@@ -1265,13 +1266,13 @@ class AgendarCita extends Page
             if (!empty($this->vehiculo['marca'])) {
                 $marcaVehiculo = strtoupper(trim($this->vehiculo['marca']));
                 $modeloVehiculo = trim($this->vehiculo['modelo'] ?? '');
-                
+
                 Log::info("[AgendarCita] Filtrando tipos de mantenimiento - Marca: {$marcaVehiculo}, Modelo: {$modeloVehiculo}");
-                
+
                 // PRIORIDAD 1: Buscar mantenimientos específicos por tipo_valor_trabajo
                 $mantenimientosPorTipoValorTrabajo = [];
                 $tipoValorTrabajo = $this->vehiculo['tipo_valor_trabajo'] ?? '';
-                
+
                 if (!empty($tipoValorTrabajo)) {
                     $mantenimientosPorTipoValorTrabajo = \App\Models\ModelMaintenance::where('is_active', true)
                         ->where('brand', $marcaVehiculo)
@@ -1279,10 +1280,10 @@ class AgendarCita extends Page
                         ->orderBy('kilometers')
                         ->pluck('name', 'id')
                         ->toArray();
-                        
+
                     Log::info("[AgendarCita] Mantenimientos específicos por tipo_valor_trabajo encontrados: " . count($mantenimientosPorTipoValorTrabajo) . " para {$tipoValorTrabajo}");
                 }
-                
+
                 if (!empty($mantenimientosPorTipoValorTrabajo)) {
                     // Si hay mantenimientos específicos para el tipo_valor_trabajo, usar SOLO esos (PRIORIDAD 1)
                     $this->tiposMantenimientoDisponibles = $mantenimientosPorTipoValorTrabajo;
@@ -1294,7 +1295,7 @@ class AgendarCita extends Page
                         ->orderBy('kilometers')
                         ->pluck('name', 'id')
                         ->toArray();
-                        
+
                     $this->tiposMantenimientoDisponibles = $tiposMantenimiento;
                     Log::info("[AgendarCita] ⚠️ No hay mantenimientos específicos por tipo_valor_trabajo, usando mantenimientos generales por marca: " . count($this->tiposMantenimientoDisponibles));
                 }
@@ -1314,25 +1315,25 @@ class AgendarCita extends Page
     {
         try {
             $query = AdditionalService::where('is_active', true);
-            
+
             // Filtrar por marca del vehículo si está disponible
             if (!empty($this->vehiculo['marca'])) {
                 $marcaVehiculo = strtoupper(trim($this->vehiculo['marca']));
                 Log::info("[AgendarCita] Filtrando servicios adicionales por marca: {$marcaVehiculo}");
-                
+
                 // Usar el nuevo scope para filtrar por marca en JSON
                 $query->porMarca($marcaVehiculo);
             }
-            
+
             $servicios = $query->orderBy('name')->get();
-            
+
             // Filtrar los servicios PQLEX y PQRBA si hay tipo de mantenimiento seleccionado
             if ($this->tipoMantenimiento) {
                 $servicios = $servicios->filter(function ($servicio) {
                     return !in_array($servicio->code, ['PQLEX', 'PQRBA']);
                 });
             }
-            
+
             $this->serviciosAdicionalesDisponibles = $servicios->pluck('name', 'id')->toArray();
             Log::info('[AgendarCita] Servicios adicionales filtrados por marca cargados: ' . count($this->serviciosAdicionalesDisponibles));
         } catch (\Exception $e) {
@@ -1469,7 +1470,7 @@ class AgendarCita extends Page
                 $comentarioFinal .= "Teléfono: " . $user->phone;
             }
 
-            // Agregar correo del cliente  
+            // Agregar correo del cliente
             if (!empty($user->email)) {
                 if (!empty($comentarioFinal)) {
                     $comentarioFinal .= "\n";
@@ -1505,7 +1506,7 @@ class AgendarCita extends Page
         }
         $comentarioFinal .= "Mantenimiento: " . $this->tipoMantenimiento;
     }
-    
+
     // 2. Servicios extras elegidos
     if (!empty($this->serviciosExtrasElegidos)) {
         if (!empty($comentarioFinal)) {
@@ -1513,7 +1514,7 @@ class AgendarCita extends Page
         }
         $comentarioFinal .= "Servicios extras elegidos: " . $this->serviciosExtrasElegidos;
     }
-    
+
     // 3. Comentarios
     if (!empty($this->comentarios)) {
         if (!empty($comentarioFinal)) {
@@ -1548,7 +1549,7 @@ class AgendarCita extends Page
             Log::info("[AgendarCita] 🔧 Código de motor extraído del MODVER '{$modver}': '{$codigoExtraido}'");
             return $codigoExtraido;
         }
-        
+
         Log::warning("[AgendarCita] ⚠️ No se pudo extraer código de motor del MODVER: '{$modver}'");
         return '';
     }
@@ -1557,7 +1558,7 @@ class AgendarCita extends Page
     {
         try {
             Log::info("=== [AgendarCita] VERIFICANDO SI EXPRESS ESTÁ DISPONIBLE ===");
-            
+
             // Si no hay vehículo, local o tipo de mantenimiento seleccionado, Express no está disponible
             if (empty($this->vehiculo) || empty($this->localSeleccionado) || empty($this->tipoMantenimiento)) {
                 Log::warning("[AgendarCita] ❌ Faltan datos básicos:");
@@ -1642,11 +1643,11 @@ class AgendarCita extends Page
                 Log::info("[AgendarCita] - Maintenance: " . json_encode($vehiculo->maintenance));
                 Log::info("[AgendarCita] - Premises: {$vehiculo->premises}");
                 Log::info("[AgendarCita] - Type: {$vehiculo->type}");
-                
+
                 // 1. Verificar código de motor
                 $codigosMotorVehiculo = $vehiculo->year; // El campo year ahora contiene códigos de motor
                 $codigoMotorCoincide = false;
-                
+
                 if (is_array($codigosMotorVehiculo)) {
                     // Si es array, buscar coincidencia
                     $codigoMotorCoincide = in_array($codigoMotor, $codigosMotorVehiculo);
@@ -1658,12 +1659,12 @@ class AgendarCita extends Page
                 } else {
                     Log::warning("[AgendarCita] ⚠️ Código de motor tiene formato inesperado: " . gettype($codigosMotorVehiculo));
                 }
-                
+
                 if (!$codigoMotorCoincide) {
                     Log::info("[AgendarCita] ❌ Código de motor no coincide. Esperado: '{$codigoMotor}', Configurado: " . json_encode($codigosMotorVehiculo));
                     continue; // Saltar este vehículo si el código de motor no coincide
                 }
-                
+
                 Log::info("[AgendarCita] ✅ Código de motor coincide: '{$codigoMotor}'");
 
                 // 2. Verificar mantenimiento
@@ -1693,7 +1694,7 @@ class AgendarCita extends Page
                         }
                     }
                 }
-                
+
                 if ($vehiculoExpress) {
                     break; // Ya encontramos coincidencia, salir del loop
                 }
@@ -1724,7 +1725,7 @@ class AgendarCita extends Page
 
             // Obtener campañas activas con filtros inteligentes
             $query = Campana::where('status', 'Activo');
-            
+
             // Filtrar por marca del vehículo si está disponible
             if (!empty($this->vehiculo['marca'])) {
                 $marcaVehiculo = strtoupper(trim($this->vehiculo['marca']));
@@ -2124,7 +2125,7 @@ class AgendarCita extends Page
             if (!$this->validarDatosCliente()) {
                 return; // No continuar si la validación falla
             }
-            
+
             // Si la validación pasa, avanzar al siguiente paso
             $this->pasoActual++;
         }
@@ -2411,24 +2412,24 @@ class AgendarCita extends Page
             $appointment->service_mode = implode(', ', $serviceModes);
             $appointment->maintenance_type = $this->tipoMantenimiento;
             $appointment->comments = $this->comentarios;
-            
+
             // ✅ GUARDAR SELECCIONES EN CAMPO JSON:
             // - Para clientes WILDCARD: Siempre guardar si tienen selecciones
             // - Para clientes NORMALES: Solo guardar si NO hay maintenance_type Y tienen selecciones
             $shouldSaveWildcardSelections = false;
-            
+
             if ($isWildcardClient) {
                 // Clientes wildcard: siempre guardar si tienen selecciones
                 $shouldSaveWildcardSelections = !empty($this->serviciosAdicionales) || !empty($this->campanaSeleccionada);
             } else {
                 // Clientes normales: solo guardar si NO hay mantenimiento Y tienen selecciones
-                $shouldSaveWildcardSelections = empty($this->tipoMantenimiento) && 
+                $shouldSaveWildcardSelections = empty($this->tipoMantenimiento) &&
                                                (!empty($this->serviciosAdicionales) || !empty($this->campanaSeleccionada));
             }
-            
+
             if ($shouldSaveWildcardSelections) {
                 $wildcardSelections = [];
-                
+
                 // Servicios adicionales seleccionados
                 if (!empty($this->serviciosAdicionales)) {
                     $serviciosNombres = [];
@@ -2441,7 +2442,7 @@ class AgendarCita extends Page
                     }
                     $wildcardSelections['servicios_adicionales'] = $serviciosNombres;
                 }
-                
+
                 // Campañas seleccionadas
                 if (!empty($this->campanaSeleccionada)) {
                     $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
@@ -2449,9 +2450,9 @@ class AgendarCita extends Page
                         $wildcardSelections['campanas'] = [$campana['titulo']];
                     }
                 }
-                
+
                 $appointment->wildcard_selections = !empty($wildcardSelections) ? json_encode($wildcardSelections) : null;
-                
+
                 // 🔍 DEBUG: Log para verificar guardado
                 Log::info('🔍 [AgendarCita] Guardando wildcard_selections', [
                     'appointment_id' => $appointment->id ?? 'NEW',
@@ -2461,7 +2462,7 @@ class AgendarCita extends Page
                     'wildcard_selections' => $wildcardSelections
                 ]);
             }
-            
+
             $appointment->status = 'pending'; // Pendiente hasta que C4C confirme
             $appointment->is_synced = false;
 
@@ -2572,14 +2573,14 @@ class AgendarCita extends Page
                     } else {
                         // Procesar servicios adicionales tradicionales
                         Log::info("[AgendarCita] Procesando servicio adicional tradicional: {$servicioAdicionalKey}");
-                        
+
                         // Extraer el ID del servicio del key (formato: 'servicio_X' donde X es el ID)
                         if (strpos($servicioAdicionalKey, 'servicio_') === 0) {
                             $servicioId = substr($servicioAdicionalKey, 9); // Remover 'servicio_'
-                            
+
                             // Buscar el servicio adicional en la base de datos
                             $additionalService = AdditionalService::find($servicioId);
-                            
+
                             if ($additionalService) {
                                 // Crear el registro en appointment_additional_service
                                 \App\Models\AppointmentAdditionalService::create([
@@ -2588,7 +2589,7 @@ class AgendarCita extends Page
                                     'notes' => 'Servicio adicional seleccionado durante el agendamiento',
                                     'price' => null // Se puede agregar precio después si es necesario
                                 ]);
-                                
+
                                 Log::info("[AgendarCita] Servicio adicional guardado: {$additionalService->name} (ID: {$additionalService->id})");
                             } else {
                                 Log::warning("[AgendarCita] No se encontró el servicio adicional con ID: {$servicioId}");
@@ -2629,23 +2630,23 @@ class AgendarCita extends Page
     public function finalizarAgendamiento(): void
     {
         // VALIDAR DATOS DEL CLIENTE PRIMERO
-        if (empty(trim($this->nombreCliente)) || empty(trim($this->apellidoCliente)) || 
+        if (empty(trim($this->nombreCliente)) || empty(trim($this->apellidoCliente)) ||
             empty(trim($this->emailCliente)) || empty(trim($this->celularCliente))) {
-            
+
             \Filament\Notifications\Notification::make()
                 ->title('Datos incompletos')
                 ->body('Por favor, completa todos los campos en la sección "Revisa tus datos" antes de continuar.')
                 ->warning()
                 ->duration(5000)
                 ->send();
-            
+
             Log::warning('[AgendarCita] Intento de continuar con datos del cliente incompletos:', [
                 'nombreCliente' => $this->nombreCliente,
                 'apellidoCliente' => $this->apellidoCliente,
                 'emailCliente' => $this->emailCliente,
                 'celularCliente' => $this->celularCliente,
             ]);
-            
+
             return; // No continuar si los datos están incompletos
         }
 
@@ -2657,11 +2658,11 @@ class AgendarCita extends Page
                 ->warning()
                 ->duration(5000)
                 ->send();
-            
+
             Log::warning('[AgendarCita] Email inválido proporcionado:', [
                 'emailCliente' => $this->emailCliente,
             ]);
-            
+
             return; // No continuar si el email es inválido
         }
 
@@ -2816,7 +2817,7 @@ class AgendarCita extends Page
     public function continuarDespuesDeExito(): void
     {
         Log::info('[AgendarCita] Continuando después del éxito del modal');
-        
+
         // Solo mostrar el modal de pop-ups si la cita fue agendada exitosamente
         if ($this->citaAgendada && $this->citaStatus === 'completed' && ! empty($this->popupsDisponibles)) {
             $this->mostrarModalPopups = true;
@@ -2830,7 +2831,7 @@ class AgendarCita extends Page
             // Si no hay pop-ups disponibles o la cita no fue exitosa, redirigir a la página de vehículos con pestañas
             $this->redirect(Vehiculos::getUrl());
         }
-        
+
         // Resetear el estado después de procesar
         $this->citaStatus = 'idle';
     }
@@ -3334,7 +3335,7 @@ class AgendarCita extends Page
     private function validarIntervaloReserva(Carbon $fecha): bool
     {
         $fechaHoy = Carbon::today();
-        
+
         // Calcular fecha mínima permitida
         $fechaMinima = $fechaHoy->copy();
         if ($this->minReservationTime && $this->minTimeUnit) {
@@ -3407,7 +3408,7 @@ class AgendarCita extends Page
 
             // ✅ FIX: Mejorar clave de cache incluyendo timestamp para validación
             $timestampValidacion = floor(time() / 60); // Revalidar cada minuto
-            $cacheKey = "horarios_disponibles:{$codigoLocal}:{$fechaStr}:" . 
+            $cacheKey = "horarios_disponibles:{$codigoLocal}:{$fechaStr}:" .
                        ($this->usarHorariosC4C ? 'c4c' : 'local') . ":{$timestampValidacion}";
             $cacheTtl = 180; // 3 minutos de caché
 
@@ -3419,12 +3420,12 @@ class AgendarCita extends Page
                     'total_horarios' => count($datosCache['horarios'] ?? []),
                     'tiene_slots_completos' => !empty($datosCache['slots_completos'])
                 ]);
-                
+
                 // ✅ FIX: Restaurar estado completo del componente
                 $this->horariosDisponibles = $datosCache['horarios'] ?? [];
                 $this->slotsCompletos = $datosCache['slots_completos'] ?? [];
                 $this->slotsC4C = $datosCache['slots_c4c'] ?? [];
-                
+
                 $esDatosDelCache = true;
             } else {
                 Log::info('🔄 [Cache] Generando horarios (no en caché)', [
@@ -3448,7 +3449,7 @@ class AgendarCita extends Page
                     'slots_c4c' => $this->slotsC4C,
                     'timestamp' => time()
                 ];
-                
+
                 Cache::put($cacheKey, $datosParaCache, $cacheTtl);
                 Log::info('💾 [Cache] Estructura completa guardada en caché', [
                     'cache_key' => $cacheKey,
@@ -3456,7 +3457,7 @@ class AgendarCita extends Page
                     'slots_completos_count' => count($this->slotsCompletos),
                     'ttl_seconds' => $cacheTtl
                 ]);
-                
+
                 $esDatosDelCache = false;
             }
 
@@ -3870,7 +3871,7 @@ class AgendarCita extends Page
         // ✅ SMART: Verificar disponibilidad en nueva estructura de datos
         $horaDisponible = false;
         $horaSeleccionable = false;
-        
+
         foreach ($this->horariosDisponibles as $horario) {
             if (is_array($horario)) {
                 // Nueva estructura con is_available
@@ -4055,9 +4056,9 @@ class AgendarCita extends Page
                     $this->paqueteId = null;
                     return;
                 }
-                
+
                 $this->paqueteId = $productService->obtenerPaquetePorTipo($this->tipoMantenimiento, $vehicle);
-                
+
                 Log::info('📦 Paquete ID obtenido (cliente wildcard)', [
                     'tipo_mantenimiento' => $this->tipoMantenimiento,
                     'paquete_id' => $this->paqueteId
@@ -4066,28 +4067,28 @@ class AgendarCita extends Page
             }
 
             // ✅ PARA CLIENTES NORMALES: Usar sistema de prioridades
-            
+
             // Preparar datos de servicios adicionales
             $serviciosAdicionales = [];
             if (!empty($this->serviciosAdicionales)) {
                 foreach ($this->serviciosAdicionales as $servicioId) {
                     // Extraer ID numérico del formato "servicio_X"
                     $id = str_replace('servicio_', '', $servicioId);
-                    
+
                     // Buscar el servicio por ID para obtener su código
                     $servicio = AdditionalService::where('id', $id)
                         ->where('is_active', true)
                         ->first();
-                    
+
                     if ($servicio) {
                         $serviciosAdicionales[] = [
-                            'nombre' => $servicio->name, 
+                            'nombre' => $servicio->name,
                             'code' => $servicio->code
                         ];
                     }
                 }
             }
-            
+
             // Preparar datos de campañas
             $campanasSeleccionadas = [];
             if (!empty($this->campanaSeleccionada)) {
@@ -4095,15 +4096,15 @@ class AgendarCita extends Page
                 $campana = Campana::where('id', $this->campanaSeleccionada)
                     ->where('status', 'Activo')
                     ->first();
-                
+
                 if ($campana) {
                     $campanasSeleccionadas[] = [
-                        'nombre' => $campana->title, 
+                        'nombre' => $campana->title,
                         'code' => $campana->code
                     ];
                 }
             }
-            
+
             $this->paqueteId = $productService->calculatePackageIdWithPriority(
                 $vehicle,
                 $this->tipoMantenimiento,
@@ -4330,23 +4331,23 @@ class AgendarCita extends Page
             // Marcar como completada
             $this->citaAgendada = true;
             $this->appointmentNumber = $appointment->appointment_number;
-            
+
             // Limpiar caché de citas pendientes para forzar actualización en página de vehículos
             $this->limpiarCacheCitasPendientes();
-            
+
             // Establecer flag en sesión para que la página de vehículos se actualice
             session()->put('cita_agendada_recientemente', [
                 'vehiculo_placa' => $this->vehiculo['placa'],
                 'appointment_number' => $appointment->appointment_number,
                 'timestamp' => now()->timestamp
             ]);
-            
+
             // Emitir evento para actualizar página de vehículos
             $this->dispatch('citaAgendadaExitosamente', [
                 'vehiculo_placa' => $this->vehiculo['placa'],
                 'appointment_number' => $appointment->appointment_number
             ]);
-            
+
             // También emitir evento JavaScript para localStorage
             $this->dispatchBrowserEvent('citaAgendadaExitosamente', [
                 'vehiculo_placa' => $this->vehiculo['placa'],
@@ -4484,7 +4485,7 @@ class AgendarCita extends Page
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             // No lanzar excepción para no interrumpir el proceso de creación de cita
             // Solo registrar el error
         }
@@ -4520,10 +4521,19 @@ class AgendarCita extends Page
 
             // Cargar relaciones antes de enviar el email
             $appointment->load('additionalServices.additionalService');
-            
+
             // Enviar el correo de edición
             Mail::to($appointment->customer_email)
                 ->send(new CitaEditada($appointment, $datosCliente, $datosVehiculo, $cambiosRealizados));
+
+             // Enviar notificación WhatsApp de reprogramación
+            app(AppointmentWhatsappService::class)->sendAppointmentCreated(
+                $appointment,
+                $datosCliente,
+                $datosVehiculo,
+                config('services.twilio.register_rescheduled'),
+                $cambiosRealizados
+            );
 
             Log::info('📧 [CitaEditada] Email de cita editada enviado exitosamente', [
                 'appointment_id' => $appointment->id,
@@ -4570,7 +4580,7 @@ class AgendarCita extends Page
 
             // Cargar relaciones antes de enviar el email
             $appointment->load('additionalServices.additionalService');
-            
+
             // Enviar el correo de cancelación
             Mail::to($appointment->customer_email)
                 ->send(new CitaCancelada($appointment, $datosCliente, $datosVehiculo, $motivoCancelacion));
@@ -4698,7 +4708,7 @@ class AgendarCita extends Page
                     'status' => 'cancelled',
                     'rescheduled' => 1
                 ]);
-                
+
                 Log::info('[AgendarCita::reprogramarCita] Cita original marcada como reprogramada', [
                     'appointment_id' => $originalAppointment->id,
                     'appointment_number' => $originalAppointment->appointment_number,
@@ -4989,9 +4999,9 @@ class AgendarCita extends Page
         $this->apellidoClienteOriginal = $this->apellidoCliente;
         $this->emailClienteOriginal = $this->emailCliente;
         $this->celularClienteOriginal = $this->celularCliente;
-        
+
         $this->editandoDatos = true;
-        
+
         Log::info('[AgendarCita] Edición de datos habilitada');
     }
 
@@ -5005,9 +5015,9 @@ class AgendarCita extends Page
         $this->apellidoCliente = $this->apellidoClienteOriginal;
         $this->emailCliente = $this->emailClienteOriginal;
         $this->celularCliente = $this->celularClienteOriginal;
-        
+
         $this->editandoDatos = false;
-        
+
         Log::info('[AgendarCita] Edición de datos cancelada');
     }
 
@@ -5060,7 +5070,7 @@ class AgendarCita extends Page
     {
         // Limpiar el número de celular (eliminar espacios y caracteres no numéricos)
         $celularLimpio = preg_replace('/[^0-9]/', '', $this->celularCliente);
-        
+
         // Verificar que tenga exactamente 9 dígitos
         if (strlen($celularLimpio) !== 9) {
             \Filament\Notifications\Notification::make()
@@ -5069,23 +5079,23 @@ class AgendarCita extends Page
                 ->danger()
                 ->persistent()
                 ->send();
-            
+
             Log::warning('[AgendarCita] Validación de celular falló', [
                 'celular_original' => $this->celularCliente,
                 'celular_limpio' => $celularLimpio,
                 'longitud' => strlen($celularLimpio)
             ]);
-            
+
             return false;
         }
-        
+
         // Actualizar el campo con el número limpio
         $this->celularCliente = $celularLimpio;
-        
+
         Log::info('[AgendarCita] Validación de celular exitosa', [
             'celular' => $this->celularCliente
         ]);
-        
+
         return true;
     }
 
@@ -5097,7 +5107,7 @@ class AgendarCita extends Page
     {
         // Limpiar automáticamente el número (solo dígitos, máximo 9)
         $this->celularCliente = substr(preg_replace('/[^0-9]/', '', $value), 0, 9);
-        
+
         Log::debug('[AgendarCita] Celular actualizado', [
             'valor_original' => $value,
             'valor_limpio' => $this->celularCliente,
@@ -5124,7 +5134,7 @@ class AgendarCita extends Page
             ]);
 
             $user = Auth::user();
-            
+
             if ($user) {
                 $user->update([
                     'name' => trim($this->nombreCliente . ' ' . $this->apellidoCliente),
@@ -5146,6 +5156,6 @@ class AgendarCita extends Page
                 ->body('Hubo un error al actualizar tus datos. Por favor, inténtalo de nuevo.')
                 ->danger()
                 ->send();
-        
+
     }
 }

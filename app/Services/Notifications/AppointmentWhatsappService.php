@@ -7,13 +7,13 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 class AppointmentWhatsappService
 {
-    public function sendAppointmentCreated(Appointment $appointment, array $cliente, array $vehiculo): void
+    public function sendAppointmentCreated(Appointment $appointment, array $cliente, array $vehiculo, ?string $contentSid = null, ?array $cambiosRealizados = null): void
     {
-      
+
         $accountSid = config('services.twilio.account_sid');
         $authToken = config('services.twilio.auth_token');
         $from = config('services.twilio.whatsapp_from');
-        $contentSid = config('services.twilio.register_appointment');
+        $contentSid = $contentSid ?? config('services.twilio.register_appointment');
 
         if (! $accountSid || ! $authToken || ! $from || ! $contentSid) {
             Log::warning('📲 [WhatsApp] Configuración Twilio incompleta, se omite envío', [
@@ -22,9 +22,26 @@ class AppointmentWhatsappService
             return;
         }
 
+        $isRescheduled = $contentSid === config('services.twilio.register_rescheduled');
+
+        Log::info('📲 [WhatsApp] Preparando envío de notificación', [
+            'appointment_id' => $appointment->id,
+            'contentSid' => $contentSid,
+            'template_type' => $isRescheduled ? 'REPROGRAMADA' : 'CREADA',
+            'tiene_cambios' => !empty($cambiosRealizados),
+        ]);
+
         $to = 'whatsapp:+51' . $appointment->customer_phone;
 
-        $variables = $this->buildContentVariables($appointment, $cliente, $vehiculo);
+        $variables = $isRescheduled && !empty($cambiosRealizados)
+            ? $this->buildRescheduledVariables($appointment, $cliente, $vehiculo, $cambiosRealizados)
+            : $this->buildContentVariables($appointment, $cliente, $vehiculo);
+
+        Log::info('📲 [WhatsApp] Variables construidas para envío', [
+            'appointment_id' => $appointment->id,
+            'template_type' => $isRescheduled ? 'REPROGRAMADA' : 'CREADA',
+            'variables' => $variables,
+        ]);
 
         $payload = [
             'To' => $to,
@@ -54,6 +71,23 @@ class AppointmentWhatsappService
             '5' => $appointment->premise->name ?? '',
             '6' => $appointment->maintenance_type ?? '',
             '7' => $appointment->comments ?? '',
+        ];
+    }
+
+    /**
+     * Construir variables para template de cita reprogramada
+     * Las variables dependen de lo que el template de Twilio espera
+     */
+    protected function buildRescheduledVariables(Appointment $appointment, array $cliente, array $vehiculo, array $cambiosRealizados): array
+    {
+
+        return [
+            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '2' => $cambiosRealizados['Fecha']['nuevo'] ?? $appointment->appointment_date ?? '',
+            '3' => $cambiosRealizados['Hora']['nuevo'] ?? $appointment->appointment_time ?? '',
+            '4' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?? '',
+            '5' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '6' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
         ];
     }
 }
