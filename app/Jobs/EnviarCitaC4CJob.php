@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Services\C4C\AppointmentService;
 use App\Jobs\DownloadProductsJob;
 use App\Mail\CitaCreada;
+use App\Services\Notifications\AppointmentWhatsappService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -498,12 +499,12 @@ class EnviarCitaC4CJob implements ShouldQueue
 
             // Cargar relaciones necesarias antes de enviar el email
             $appointment->load(['additionalServices.additionalService', 'vehicle']);
-            
+
             Log::info('📧 [EnviarCitaC4CJob] Relaciones cargadas', [
                 'additional_services_count' => $appointment->additionalServices->count(),
                 'vehicle_loaded' => $appointment->vehicle ? 'YES' : 'NO'
             ]);
-            
+
             // Preparar datos del vehículo (usar relación vehicle si está disponible)
             $datosVehiculo = [
                 'marca' => $appointment->vehicle?->brand_name ?? $appointment->vehicle_brand ?? 'No especificado',
@@ -512,7 +513,7 @@ class EnviarCitaC4CJob implements ShouldQueue
             ];
 
             Log::info('📧 [EnviarCitaC4CJob] Datos del vehículo preparados', $datosVehiculo);
-            
+
             // 🔍 LOG ANTES DEL ENVÍO
             Log::info('📧 [EnviarCitaC4CJob] ENVIANDO EMAIL de confirmación...', [
                 'to_email' => $appointment->customer_email,
@@ -530,6 +531,17 @@ class EnviarCitaC4CJob implements ShouldQueue
                 'appointment_number' => $appointment->appointment_number
             ]);
 
+            // después de Mail::to()->send(...)
+            app(AppointmentWhatsappService::class)
+                ->sendAppointmentCreated($appointment, $datosCliente, $datosVehiculo);
+
+            Log::info('📲 [EnviarCitaC4CJob] Notificación WhatsApp disparada', [
+                'appointment_id' => $appointment->id,
+                'to_phone' => $appointment->customer_phone,
+            ]);
+
+
+
         } catch (\Exception $e) {
             Log::error('📧 [EnviarCitaC4CJob] ❌ ERROR ENVIANDO EMAIL DE CONFIRMACIÓN', [
                 'appointment_id' => $appointment->id,
@@ -539,7 +551,7 @@ class EnviarCitaC4CJob implements ShouldQueue
                 'error_line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             // No lanzar excepción para no interrumpir el proceso de sincronización
             // Solo registrar el error
         }
