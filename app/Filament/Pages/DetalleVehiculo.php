@@ -7,6 +7,7 @@ use App\Models\Vehicle;
 use App\Jobs\DeleteAppointmentC4CJob;
 use App\Services\VehiculoSoapService;
 use App\Services\C4C\AppointmentService;
+use App\Services\Notifications\AppointmentWhatsappService;
 use App\Mail\CitaCancelada;
 use Illuminate\Support\Facades\Mail;
 use BezhanSalleh\FilamentShield\Traits\HasPageShield;
@@ -93,7 +94,7 @@ class DetalleVehiculo extends Page
         if ($vehiculoId) {
             // Limpiar el ID del vehículo (eliminar espacios)
             $vehiculoId = trim(str_replace(' ', '', $vehiculoId));
-            
+
             // IMPORTANTE: Asignar el vehiculoId limpio a la propiedad para uso posterior
             $this->vehiculoId = $vehiculoId;
             Log::info("[DetalleVehiculo] Cargando datos para vehículo ID (limpio): {$vehiculoId}");
@@ -262,7 +263,7 @@ class DetalleVehiculo extends Page
             Log::info("[DetalleVehiculo] Placa del vehículo: {$placaVehiculo}");
 
             // Obtener el usuario logueado y verificar si tiene datos reales de C4C
-            $user = Auth::user();   
+            $user = Auth::user();
             if (!$user || !$user->hasRealC4cData()) {
                 Log::warning("[DetalleVehiculo] Usuario no tiene datos C4C válidos (es comodín o sin c4c_internal_id)", [
                     'user_id' => $user ? $user->id : 'N/A',
@@ -270,7 +271,7 @@ class DetalleVehiculo extends Page
                     'is_comodin' => $user ? $user->is_comodin : 'N/A',
                     'has_real_c4c_data' => $user ? $user->hasRealC4cData() : 'N/A'
                 ]);
-                
+
                 // Para clientes comodín, usar citas locales directamente
                 $this->cargarCitasLocalesPendientes($vehiculoId);
                 return;
@@ -293,7 +294,7 @@ class DetalleVehiculo extends Page
                     'total_citas_c4c' => count($result['data']),
                     'estructura_primera_cita' => !empty($result['data']) ? array_keys($result['data'][0]) : 'vacio'
                 ]);
-                
+
                 foreach ($result['data'] as $index => $citaBruta) {
                     Log::info("[DetalleVehiculo] Cita bruta C4C #{$index}", [
                         'uuid' => $citaBruta['uuid'] ?? 'N/A',
@@ -305,21 +306,21 @@ class DetalleVehiculo extends Page
                         'creation_date' => $citaBruta['creation_date'] ?? 'N/A'
                     ]);
                 }
-                
+
                 // Filtrar citas solo para este vehículo específico
                 $citasVehiculo = array_filter($result['data'], function($cita) use ($placaVehiculo) {
                     // Verificar diferentes estructuras posibles para la placa
-                    $placaCita = $cita['license_plate'] ?? 
-                                $cita['vehicle']['plate'] ?? 
-                                $cita['plate'] ?? 
+                    $placaCita = $cita['license_plate'] ??
+                                $cita['vehicle']['plate'] ??
+                                $cita['plate'] ??
                                 null;
-                    
+
                     Log::debug("[DetalleVehiculo] Comparando placas", [
                         'placa_vehiculo' => $placaVehiculo,
                         'placa_cita' => $placaCita,
                         'cita_estructura' => array_keys($cita),
                     ]);
-                    
+
                     return $placaCita && trim($placaCita) === trim($placaVehiculo);
                 });
 
@@ -401,7 +402,7 @@ class DetalleVehiculo extends Page
                     Log::info('[DetalleVehiculo] ===== CITAS TRANSFORMADAS FINALES =====', [
                         'total_citas_transformadas' => count($this->citasAgendadas)
                     ]);
-                    
+
                     foreach ($this->citasAgendadas as $index => $citaFinal) {
                         Log::info("[DetalleVehiculo] Cita final #{$index}", [
                             'id' => $citaFinal['id'] ?? 'N/A',
@@ -441,7 +442,7 @@ class DetalleVehiculo extends Page
 
     /**
      * Aplicar filtros de visibilidad y remover duplicados de citas
-     * 
+     *
      * Reglas de visibilidad según especificación del proyecto:
      * 1. Estados 1 (Generada) y 2 (Confirmada): siempre visibles
      * 2. Estados 3 (En taller): siempre visibles
@@ -453,7 +454,7 @@ class DetalleVehiculo extends Page
     {
         Log::info("[DetalleVehiculo] ===== INICIANDO FILTROS DE VISIBILIDAD Y DEDUPLICACIÓN =====");
         Log::info("[DetalleVehiculo] Aplicando filtros de visibilidad, citas recibidas: " . count($citas));
-        
+
         // Depuración: Mostrar detalle de todas las citas para revisar el estado 3
         foreach ($citas as $index => $cita) {
             $estadoCita = $cita['appointment_status'] ?? $cita['status']['appointment_code'] ?? '1';
@@ -466,22 +467,22 @@ class DetalleVehiculo extends Page
                 'estructura_cita' => array_keys($cita)
             ]);
         }
-        
+
         $citasFiltradas = [];
-        
+
         foreach ($citas as $cita) {
             // Mejorar obtención del estado buscando en múltiples ubicaciones posibles
             $estadoCita = $cita['appointment_status'] ?? $cita['status']['appointment_code'] ?? '1';
             $fechaCambio = $cita['last_change_date'] ?? null;
             $uuid = $cita['uuid'] ?? $cita['id'] ?? null;
-            
+
             Log::info("[DetalleVehiculo] Evaluando cita", [
                 'uuid' => $uuid,
                 'estado' => $estadoCita,
                 'estado_raw' => is_string($estadoCita) ? $estadoCita : json_encode($estadoCita),
                 'fecha_cambio' => $fechaCambio
             ]);
-            
+
             // Regla 1: Estados 1 (Generada), 2 (Confirmada) y 3 (En proceso) siempre visibles
             // Asegurar que las comparaciones sean con strings para evitar problemas de tipo
             if (in_array((string)$estadoCita, ['1', '2', '3'])) {
@@ -489,27 +490,27 @@ class DetalleVehiculo extends Page
                 $citasFiltradas[] = $cita;
                 continue;
             }
-            
+
             // Regla 2: Estados 4 (Diferida), 5 (Completada) y 6 (Cancelada) no visibles
             if (in_array((string)$estadoCita, ['4', '5', '6'])) {
                 Log::info("[DetalleVehiculo] Cita filtrada - Estado {$estadoCita} (Diferida/Completada/Cancelada)");
                 continue;
             }
-            
+
             // Para cualquier otro estado no definido, incluir por seguridad
             Log::info("[DetalleVehiculo] Cita incluida - Estado no definido: {$estadoCita}");
             $citasFiltradas[] = $cita;
         }
-        
+
         // NUEVA REGLA 5: Solo una cita activa por vehículo
         $citaUnica = $this->seleccionarSoloCitaMasReciente($citasFiltradas);
-        
+
         Log::info("[DetalleVehiculo] Filtros aplicados", [
             'citas_originales' => count($citas),
             'citas_filtradas' => count($citasFiltradas),
             'citas_finales' => count($citaUnica)
         ]);
-        
+
         // LOG FINAL: Mostrar resultado de deduplicación
         Log::info("[DetalleVehiculo] ===== RESULTADO FINAL DE DEDUPLICACIÓN =====");
         foreach ($citaUnica as $index => $citaFinal) {
@@ -521,20 +522,20 @@ class DetalleVehiculo extends Page
                 'last_change_date' => $citaFinal['last_change_date'] ?? 'N/A'
             ]);
         }
-        
+
         return $citaUnica;
     }
 
     /**
      * Evaluar si una cita con estado "Trabajo concluido" en el frontend debe expirar
-     * 
+     *
      * Lógica: La cita debe ser visible hasta el día siguiente a las 11:59pm
      * después de que se marcó como "Trabajo concluido" en el frontend
-     * 
+     *
      * NOTA: Esta lógica se aplica solo al estado frontend "Trabajo concluido"
      * y no está relacionada con el estado C4C 5 (Completada) ya que este
      * último ahora se filtra (no se muestra) junto con el estado 6.
-     * 
+     *
      * @param array $cita Datos de la cita
      * @param \Carbon\Carbon $ahora Fecha/hora actual
      * @return bool true si debe expirar (ocultar), false si sigue siendo visible
@@ -545,17 +546,17 @@ class DetalleVehiculo extends Page
             // Verificar si el estado en el frontend es "Trabajo concluido"
             // Esto se determina por los datos de SAP, no por el estado de C4C
             $estadoInfo = $this->obtenerInformacionEstadoCompleta($cita['appointment_status'] ?? '1', $cita);
-            $esTrabajoConcluido = ($estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false) && 
+            $esTrabajoConcluido = ($estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false) &&
                                  ($estadoInfo['etapas']['trabajo_concluido']['activo'] ?? false);
-            
+
             // Si no está en estado "Trabajo concluido", no aplicar expiración
             if (!$esTrabajoConcluido) {
                 return false;
             }
-            
+
             // Obtener la fecha de cambio (cuando se marcó como completada)
             $fechaCambio = $cita['last_change_date'] ?? null;
-            
+
             // Si no hay fecha de cambio, asumir que es válida (no expirar)
             if (empty($fechaCambio)) {
                 Log::debug("[DetalleVehiculo] Cita en estado Trabajo Concluido sin fecha_cambio - mantener visible", [
@@ -563,18 +564,18 @@ class DetalleVehiculo extends Page
                 ]);
                 return false;
             }
-            
+
             // Parsear la fecha de cambio
             $fechaCambioCarbon = \Carbon\Carbon::parse($fechaCambio);
-            
+
             // Calcular el límite de expiración: día siguiente a las 11:59:59 PM
             $limiteExpiracion = $fechaCambioCarbon->copy()
                 ->addDay() // Día siguiente
                 ->endOfDay(); // 23:59:59
-            
+
             // Verificar si ya expiró
             $haExpirado = $ahora->isAfter($limiteExpiracion);
-            
+
             Log::info("[DetalleVehiculo] Evaluación expiración cita estado Trabajo Concluido", [
                 'uuid' => $cita['uuid'] ?? $cita['id'] ?? 'N/A',
                 'fecha_cambio' => $fechaCambio,
@@ -584,9 +585,9 @@ class DetalleVehiculo extends Page
                 'ha_expirado' => $haExpirado ? 'SÍ' : 'NO',
                 'tiempo_restante' => $haExpirado ? '0' : $ahora->diffForHumans($limiteExpiracion, true)
             ]);
-            
+
             return $haExpirado;
-            
+
         } catch (\Exception $e) {
             // En caso de error al parsear fechas, mantener la cita visible (no expirar)
             Log::error("[DetalleVehiculo] Error al evaluar expiración de cita estado Trabajo Concluido", [
@@ -597,7 +598,7 @@ class DetalleVehiculo extends Page
             return false;
         }
     }
-    
+
     /**
      * Remover duplicados manteniendo la cita más reciente por fecha de cambio
      * Esto maneja el caso donde una edición crea una nueva cita pero mantiene la anterior
@@ -607,11 +608,11 @@ class DetalleVehiculo extends Page
         if (count($citas) <= 1) {
             return $citas;
         }
-        
+
         Log::info("[DetalleVehiculo] Iniciando deduplicación de citas", [
             'total_citas' => count($citas)
         ]);
-        
+
         // Debug: mostrar todas las citas recibidas
         foreach ($citas as $index => $cita) {
             Log::info("[DetalleVehiculo] Cita {$index}", [
@@ -623,18 +624,18 @@ class DetalleVehiculo extends Page
                 'estado' => $cita['appointment_status'] ?? 'N/A'
             ]);
         }
-        
+
         // Enfoque 1: Agrupar por UUID base (las citas editadas pueden compartir parte del UUID)
         $citasPorUUID = $this->agruparPorUUIDBase($citas);
-        
+
         // Enfoque 2: Si no hay duplicados por UUID, agrupar por similitud de fecha/hora/centro
         if (count($citasPorUUID) === count($citas)) {
             Log::info("[DetalleVehiculo] No se encontraron duplicados por UUID, verificando similitud fecha/hora");
             $citasPorUUID = $this->agruparPorSimilitud($citas);
         }
-        
+
         $citasFinales = [];
-        
+
         foreach ($citasPorUUID as $claveGrupo => $grupo) {
             if (count($grupo) === 1) {
                 // Solo una cita en este grupo, mantenerla
@@ -644,45 +645,45 @@ class DetalleVehiculo extends Page
                 Log::info("[DetalleVehiculo] Detectadas citas duplicadas en grupo '{$claveGrupo}'", [
                     'cantidad_duplicadas' => count($grupo)
                 ]);
-                
+
                 $citaMasReciente = $this->seleccionarCitaMasReciente($grupo);
-                
+
                 Log::info("[DetalleVehiculo] Cita más reciente seleccionada", [
                     'uuid_seleccionado' => $citaMasReciente['uuid'] ?? $citaMasReciente['id'] ?? 'N/A',
                     'fecha_cambio' => $citaMasReciente['last_change_date'] ?? 'N/A',
                     'descartadas' => count($grupo) - 1
                 ]);
-                
+
                 $citasFinales[] = $citaMasReciente;
             }
         }
-        
+
         Log::info("[DetalleVehiculo] Deduplicación completada", [
             'citas_originales' => count($citas),
             'citas_finales' => count($citasFinales),
             'duplicados_removidos' => count($citas) - count($citasFinales)
         ]);
-        
+
         return $citasFinales;
     }
-    
+
     /**
      * Agrupar citas por base del UUID (para detectar ediciones)
      */
     protected function agruparPorUUIDBase(array $citas): array
     {
         $grupos = [];
-        
+
         foreach ($citas as $cita) {
             $uuid = $cita['uuid'] ?? $cita['id'] ?? '';
-            
+
             if (empty($uuid)) {
                 // Si no tiene UUID, crear grupo único
                 $claveGrupo = 'sin_uuid_' . uniqid();
                 $grupos[$claveGrupo] = [$cita];
                 continue;
             }
-            
+
             // Extraer base del UUID (primeras 3 secciones)
             $partesUUID = explode('-', $uuid);
             if (count($partesUUID) >= 3) {
@@ -690,55 +691,55 @@ class DetalleVehiculo extends Page
             } else {
                 $baseUUID = $uuid;
             }
-            
+
             if (!isset($grupos[$baseUUID])) {
                 $grupos[$baseUUID] = [];
             }
             $grupos[$baseUUID][] = $cita;
         }
-        
+
         return $grupos;
     }
-    
+
     /**
      * Agrupar citas por similitud de fecha/hora/centro (fallback)
      */
     protected function agruparPorSimilitud(array $citas): array
     {
         $grupos = [];
-        
+
         foreach ($citas as $cita) {
             $fechaAgendada = $cita['scheduled_start_date'] ?? '';
             $centroId = $cita['center_id'] ?? '';
-            
+
             // Crear clave de similitud más flexible
             $claveSimilitud = $fechaAgendada . '_' . $centroId;
-            
+
             if (!isset($grupos[$claveSimilitud])) {
                 $grupos[$claveSimilitud] = [];
             }
             $grupos[$claveSimilitud][] = $cita;
         }
-        
+
         return $grupos;
     }
-    
+
     /**
      * Seleccionar la cita más reciente de un grupo
      */
     protected function seleccionarCitaMasReciente(array $grupo): array
     {
         $citaMasReciente = $grupo[0];
-        
+
         foreach ($grupo as $cita) {
             $fechaCambioActual = $cita['last_change_date'] ?? $cita['creation_date'] ?? '';
             $fechaCambioMasReciente = $citaMasReciente['last_change_date'] ?? $citaMasReciente['creation_date'] ?? '';
-            
+
             // Si las fechas están vacías, usar el estado como criterio secundario
             if (empty($fechaCambioActual) && empty($fechaCambioMasReciente)) {
                 $estadoActual = $cita['appointment_status'] ?? '1';
                 $estadoMasReciente = $citaMasReciente['appointment_status'] ?? '1';
-                
+
                 // Preferir estados más avanzados (2 > 1)
                 if ($estadoActual > $estadoMasReciente) {
                     $citaMasReciente = $cita;
@@ -747,10 +748,10 @@ class DetalleVehiculo extends Page
                 $citaMasReciente = $cita;
             }
         }
-        
+
         return $citaMasReciente;
     }
-    
+
     /**
      * NUEVA REGLA: Seleccionar solo la cita más reciente para este vehículo
      * Esto resuelve el problema de múltiples citas activas después de ediciones
@@ -760,11 +761,11 @@ class DetalleVehiculo extends Page
         if (count($citas) <= 1) {
             return $citas;
         }
-        
+
         Log::info("[DetalleVehiculo] Múltiples citas encontradas, seleccionando solo la más reciente", [
             'total_citas' => count($citas)
         ]);
-        
+
         // Debug: mostrar todas las citas antes de la selección
         foreach ($citas as $index => $cita) {
             Log::info("[DetalleVehiculo] Cita {$index} para selección", [
@@ -776,26 +777,26 @@ class DetalleVehiculo extends Page
                 'estado' => $cita['appointment_status'] ?? 'N/A'
             ]);
         }
-        
+
         $citaMasReciente = $citas[0];
-        
+
         foreach ($citas as $cita) {
             // Criterio 1: Fecha de cambio más reciente
             $fechaCambioActual = $cita['last_change_date'] ?? '';
             $fechaCambioMasReciente = $citaMasReciente['last_change_date'] ?? '';
-            
+
             if (!empty($fechaCambioActual) && !empty($fechaCambioMasReciente)) {
                 if ($fechaCambioActual > $fechaCambioMasReciente) {
                     $citaMasReciente = $cita;
                     continue;
                 }
             }
-            
+
             // Criterio 2: Si no hay fechas de cambio, usar fecha de creación
             if (empty($fechaCambioActual) && empty($fechaCambioMasReciente)) {
                 $fechaCreacionActual = $cita['creation_date'] ?? '';
                 $fechaCreacionMasReciente = $citaMasReciente['creation_date'] ?? '';
-                
+
                 if (!empty($fechaCreacionActual) && !empty($fechaCreacionMasReciente)) {
                     if ($fechaCreacionActual > $fechaCreacionMasReciente) {
                         $citaMasReciente = $cita;
@@ -803,12 +804,12 @@ class DetalleVehiculo extends Page
                     }
                 }
             }
-            
+
             // Criterio 3: Si no hay fechas, usar fecha agendada más reciente
             if (empty($fechaCambioActual) && empty($fechaCambioMasReciente)) {
                 $fechaAgendadaActual = $cita['scheduled_start_date'] ?? '';
                 $fechaAgendadaMasReciente = $citaMasReciente['scheduled_start_date'] ?? '';
-                
+
                 if (!empty($fechaAgendadaActual) && !empty($fechaAgendadaMasReciente)) {
                     if ($fechaAgendadaActual > $fechaAgendadaMasReciente) {
                         $citaMasReciente = $cita;
@@ -817,14 +818,14 @@ class DetalleVehiculo extends Page
                 }
             }
         }
-        
+
         Log::info("[DetalleVehiculo] Cita seleccionada como la más reciente", [
             'uuid_seleccionado' => $citaMasReciente['uuid'] ?? $citaMasReciente['id'] ?? 'N/A',
             'fecha_agendada' => $citaMasReciente['scheduled_start_date'] ?? 'N/A',
             'fecha_cambio' => $citaMasReciente['last_change_date'] ?? 'N/A',
             'citas_descartadas' => count($citas) - 1
         ]);
-        
+
         return [$citaMasReciente];
     }
 
@@ -851,10 +852,10 @@ class DetalleVehiculo extends Page
                 Log::info("[DetalleVehiculo] ===== PROCESANDO CITAS LOCALES ANTES DE DEDUPLICACIÓN =====", [
                     'total_citas_locales' => $citasLocales->count()
                 ]);
-                
+
                 // Crear array temporal para aplicar deduplicación
                 $citasParaDeduplicar = [];
-                
+
                 foreach ($citasLocales as $index => $cita) {
                     Log::info("[DetalleVehiculo] Cita local #{$index} antes de deduplicación", [
                         'id' => $cita->id,
@@ -866,7 +867,7 @@ class DetalleVehiculo extends Page
                         'created_at' => $cita->created_at ? $cita->created_at->format('Y-m-d H:i:s') : 'N/A',
                         'updated_at' => $cita->updated_at ? $cita->updated_at->format('Y-m-d H:i:s') : 'N/A'
                     ]);
-                    
+
                     // Convertir a formato similar al de C4C para usar la misma lógica de deduplicación
                     $citasParaDeduplicar[] = [
                         'uuid' => $cita->c4c_uuid ?? 'local-' . $cita->id,
@@ -881,22 +882,22 @@ class DetalleVehiculo extends Page
                         '_original_cita' => $cita
                     ];
                 }
-                
+
                 // APLICAR DEDUPLICACIÓN A CITAS LOCALES
                 Log::info("[DetalleVehiculo] ===== APLICANDO DEDUPLICACIÓN A CITAS LOCALES =====");
                 $citasDeduplicadas = $this->seleccionarSoloCitaMasReciente($citasParaDeduplicar);
-                
+
                 Log::info("[DetalleVehiculo] ===== RESULTADO DEDUPLICACIÓN CITAS LOCALES =====", [
                     'citas_originales' => count($citasParaDeduplicar),
                     'citas_finales' => count($citasDeduplicadas)
                 ]);
-                
+
                 $this->citasAgendadas = [];
 
                 foreach ($citasDeduplicadas as $citaDedup) {
                     // Recuperar el objeto original de la cita
                     $cita = $citaDedup['_original_cita'];
-                    
+
                     Log::info("[DetalleVehiculo] Procesando cita local deduplicada", [
                         'id' => $cita->id,
                         'appointment_number' => $cita->appointment_number,
@@ -959,7 +960,7 @@ class DetalleVehiculo extends Page
                 Log::info("[DetalleVehiculo] ===== CITAS LOCALES FINALES TRANSFORMADAS =====", [
                     'total_citas_finales' => count($this->citasAgendadas)
                 ]);
-                
+
                 foreach ($this->citasAgendadas as $index => $citaFinal) {
                     Log::info("[DetalleVehiculo] Cita local final #{$index}", [
                         'id' => $citaFinal['id'] ?? 'N/A',
@@ -980,7 +981,7 @@ class DetalleVehiculo extends Page
         } catch (\Exception $e) {
             Log::error('[DetalleVehiculo] Error al cargar citas locales: ' . $e->getMessage());
             Log::error('[DetalleVehiculo] Stack trace: ' . $e->getTraceAsString());
-            
+
             // En caso de error, asegurar que el array esté inicializado
             $this->citasAgendadas = [];
         }
@@ -1031,7 +1032,7 @@ class DetalleVehiculo extends Page
     {
         try {
             $appointment = Appointment::where('c4c_uuid', $c4cUuid)->first();
-            
+
             if (!$appointment) {
                 Log::warning("[DetalleVehiculo] No se encontró la cita para guardar estados frontend: {$c4cUuid}");
                 return;
@@ -1039,20 +1040,20 @@ class DetalleVehiculo extends Page
 
             $currentStates = $appointment->frontend_states ?? [];
             $now = now()->format('Y-m-d H:i:s');
-            
+
             // Procesar cita_confirmada
             $citaConfirmadaActivo = $estadoInfo['etapas']['cita_confirmada']['activo'] ?? false;
             $citaConfirmadaCompletado = $estadoInfo['etapas']['cita_confirmada']['completado'] ?? false;
-            
+
             $currentCitaConfirmada = $currentStates['cita_confirmada'] ?? [];
             $previousActivo = $currentCitaConfirmada['activo'] ?? false;
             $previousCompletado = $currentCitaConfirmada['completado'] ?? false;
-            
+
             // Actualizar timestamp si hay cambio de estado o es la primera vez
-            if (!isset($currentCitaConfirmada['timestamp']) || 
-                $citaConfirmadaActivo != $previousActivo || 
+            if (!isset($currentCitaConfirmada['timestamp']) ||
+                $citaConfirmadaActivo != $previousActivo ||
                 $citaConfirmadaCompletado != $previousCompletado) {
-                
+
                 if ($citaConfirmadaActivo || $citaConfirmadaCompletado) {
                     $currentCitaConfirmada['timestamp'] = $now;
                     Log::info("[DetalleVehiculo] Cita confirmada actualizada con timestamp: {$now}", [
@@ -1061,24 +1062,24 @@ class DetalleVehiculo extends Page
                     ]);
                 }
             }
-            
+
             $currentCitaConfirmada['activo'] = $citaConfirmadaActivo;
             $currentCitaConfirmada['completado'] = $citaConfirmadaCompletado;
             $currentStates['cita_confirmada'] = $currentCitaConfirmada;
-            
+
             // Procesar en_trabajo
             $enTrabajoActivo = $estadoInfo['etapas']['en_trabajo']['activo'] ?? false;
             $enTrabajoCompletado = $estadoInfo['etapas']['en_trabajo']['completado'] ?? false;
-            
+
             $currentEnTrabajo = $currentStates['en_trabajo'] ?? [];
             $previousEnTrabajoActivo = $currentEnTrabajo['activo'] ?? false;
             $previousEnTrabajoCompletado = $currentEnTrabajo['completado'] ?? false;
-            
+
             // Actualizar timestamp si hay cambio de estado o es la primera vez
-            if (!isset($currentEnTrabajo['timestamp']) || 
-                $enTrabajoActivo != $previousEnTrabajoActivo || 
+            if (!isset($currentEnTrabajo['timestamp']) ||
+                $enTrabajoActivo != $previousEnTrabajoActivo ||
                 $enTrabajoCompletado != $previousEnTrabajoCompletado) {
-                
+
                 if ($enTrabajoActivo || $enTrabajoCompletado) {
                     $currentEnTrabajo['timestamp'] = $now;
                     Log::info("[DetalleVehiculo] En trabajo actualizado con timestamp: {$now}", [
@@ -1087,24 +1088,24 @@ class DetalleVehiculo extends Page
                     ]);
                 }
             }
-            
+
             $currentEnTrabajo['activo'] = $enTrabajoActivo;
             $currentEnTrabajo['completado'] = $enTrabajoCompletado;
             $currentStates['en_trabajo'] = $currentEnTrabajo;
-            
+
             // Procesar trabajo_concluido
             $trabajoConcluidoActivo = $estadoInfo['etapas']['trabajo_concluido']['activo'] ?? false;
             $trabajoConcluidoCompletado = $estadoInfo['etapas']['trabajo_concluido']['completado'] ?? false;
-            
+
             $currentTrabajoConcluido = $currentStates['trabajo_concluido'] ?? [];
             $previousTrabajoActivo = $currentTrabajoConcluido['activo'] ?? false;
             $previousTrabajoCompletado = $currentTrabajoConcluido['completado'] ?? false;
-            
+
             // Actualizar timestamp si hay cambio de estado o es la primera vez
-            if (!isset($currentTrabajoConcluido['timestamp']) || 
-                $trabajoConcluidoActivo != $previousTrabajoActivo || 
+            if (!isset($currentTrabajoConcluido['timestamp']) ||
+                $trabajoConcluidoActivo != $previousTrabajoActivo ||
                 $trabajoConcluidoCompletado != $previousTrabajoCompletado) {
-                
+
                 if ($trabajoConcluidoActivo || $trabajoConcluidoCompletado) {
                     $currentTrabajoConcluido['timestamp'] = $now;
                     Log::info("[DetalleVehiculo] Trabajo concluido actualizado con timestamp: {$now}", [
@@ -1113,18 +1114,18 @@ class DetalleVehiculo extends Page
                     ]);
                 }
             }
-            
+
             $currentTrabajoConcluido['activo'] = $trabajoConcluidoActivo;
             $currentTrabajoConcluido['completado'] = $trabajoConcluidoCompletado;
             $currentStates['trabajo_concluido'] = $currentTrabajoConcluido;
-            
+
             $appointment->frontend_states = $currentStates;
             $appointment->save();
-            
+
             Log::info("[DetalleVehiculo] Estados frontend guardados en BD para cita: {$c4cUuid}", [
                 'frontend_states' => $currentStates
             ]);
-            
+
         } catch (\Exception $e) {
             Log::error("[DetalleVehiculo] Error al guardar estados frontend en BD: " . $e->getMessage());
         }
@@ -1138,7 +1139,7 @@ class DetalleVehiculo extends Page
         try {
             // Find the appointment by c4c_uuid and retrieve the frontend_states
             $appointment = Appointment::where('c4c_uuid', $c4cUuid)->first();
-            
+
             if ($appointment && !empty($appointment->frontend_states)) {
                 Log::info("[DetalleVehiculo] Estados frontend recuperados de BD para cita: {$c4cUuid}", [
                     'frontend_states' => $appointment->frontend_states
@@ -1160,7 +1161,7 @@ class DetalleVehiculo extends Page
     protected function obtenerInformacionEstadoCompletaLocal(string $statusLocal, $appointment = null): array
     {
         $estadoC4C = $this->mapearEstadoLocalAC4C($statusLocal);
-        
+
         // Preparar datos de la cita si están disponibles
         $appointmentData = null;
         if ($appointment) {
@@ -1172,7 +1173,7 @@ class DetalleVehiculo extends Page
                 'id' => 'local-' . $appointment->id,
             ];
         }
-        
+
         return $this->obtenerInformacionEstadoCompleta($estadoC4C, $appointmentData);
     }
 
@@ -1196,23 +1197,23 @@ class DetalleVehiculo extends Page
                 $appointmentTime = null;
                 if ($appointment->appointment_time) {
                     // Formatear la hora directamente desde la BD (ya está en hora local de Perú)
-                    $appointmentTime = $appointment->appointment_time instanceof \Carbon\Carbon 
+                    $appointmentTime = $appointment->appointment_time instanceof \Carbon\Carbon
                         ? $appointment->appointment_time->format('H:i')
                         : (is_string($appointment->appointment_time) ? substr($appointment->appointment_time, 0, 5) : null);
                 }
-                
+
                 // ✅ INCLUIR wildcard_selections
                 $wildcardSelections = null;
                 if ($appointment->wildcard_selections) {
                     $wildcardSelections = json_decode($appointment->wildcard_selections, true);
                 }
-                
+
                 $result = [
                     'maintenance_type' => $appointment->maintenance_type,
                     'appointment_time' => $appointmentTime,
                     'wildcard_selections' => $wildcardSelections
                 ];
-                
+
                 Log::info("[DetalleVehiculo] Datos de appointment encontrados", [
                     'uuid' => $uuid,
                     'maintenance_type' => $result['maintenance_type'] ?? 'NULL',
@@ -1220,7 +1221,7 @@ class DetalleVehiculo extends Page
                     'has_wildcard_selections' => !empty($wildcardSelections),
                     'appointment_time_raw' => $appointment->appointment_time
                 ]);
-                
+
                 return $result;
             }
 
@@ -1339,18 +1340,18 @@ class DetalleVehiculo extends Page
         }
 
         $placa = trim(str_replace(' ', '', $this->vehiculo['placa']));
-        
+
         Log::info("[DetalleVehiculo] 🔄 RECARGA MANUAL DE DATOS SAP solicitada para placa: {$placa}");
-        
+
         if (config('vehiculos_webservice.enabled', true)) {
             $this->cargarDatosVehiculoDesdeSAP($placa);
-            
+
             // Recargar citas con los nuevos datos SAP
             $vehiculo = Vehicle::where('license_plate', $placa)->first();
             if ($vehiculo) {
                 $this->cargarCitasAgendadas($vehiculo->id);
             }
-            
+
             \Filament\Notifications\Notification::make()
                 ->title('Datos SAP Recargados')
                 ->body('Los datos del vehículo y estados de citas han sido actualizados desde SAP.')
@@ -1455,7 +1456,7 @@ class DetalleVehiculo extends Page
 
         // Redirigir a AgendarCita con parámetros de edición
         $this->redirect(AgendarCita::getUrl($editParams));
-        
+
         Log::info('✅ [DetalleVehiculo::editarCita] ========== REDIRECCIÓN EJECUTADA ==========');
     }
 
@@ -1467,21 +1468,21 @@ class DetalleVehiculo extends Page
         // Mapeo basado en los datos disponibles
         $centroId = $citaData['centro_id'] ?? '';
         $sede = $citaData['sede'] ?? '';
-        
+
         // Mapeo directo si ya viene el código correcto
         if (in_array($centroId, ['M013', 'M023', 'M303', 'M313', 'L013', 'L023'])) {
             return $centroId;
         }
-        
+
         // Mapeo por nombre de sede
         $mapeoSedes = [
             'MOLINA' => 'M013',
-            'CANADA' => 'M023', 
+            'CANADA' => 'M023',
             'MIRAFLORES' => 'M303',
             'AREQUIPA' => 'M313',
             'LEXUS' => 'L013'
         ];
-        
+
         foreach ($mapeoSedes as $nombreSede => $codigoLocal) {
             if (stripos($sede, $nombreSede) !== false) {
                 Log::info('[DetalleVehiculo::mapearCentroIdParaEdicion] Mapeo encontrado', [
@@ -1491,13 +1492,13 @@ class DetalleVehiculo extends Page
                 return $codigoLocal;
             }
         }
-        
+
         // Fallback: retornar el centro_id original
         Log::warning('[DetalleVehiculo::mapearCentroIdParaEdicion] No se pudo mapear centro', [
             'centro_id' => $centroId,
             'sede' => $sede
         ]);
-        
+
         return $centroId;
     }
 
@@ -1519,7 +1520,7 @@ class DetalleVehiculo extends Page
         // Validar que tenemos los datos necesarios
         if (empty($citaData['id'])) {
             Log::error('[DetalleVehiculo::anularCita] UUID de cita no disponible');
-            
+
             \Filament\Notifications\Notification::make()
                 ->title('Error')
                 ->body('No se puede anular la cita: ID no disponible.')
@@ -1534,12 +1535,12 @@ class DetalleVehiculo extends Page
         // Validaciones de negocio - Solo permitir anular citas en estado 1 (Generada) o 2 (Confirmada)
         if (!in_array($statusRaw, ['1', '2'])) {
             $estadoNombre = $this->mapearEstadoCitaC4C($statusRaw);
-            
+
             Log::warning('[DetalleVehiculo::anularCita] Intento de anular cita en estado no válido', [
                 'status_raw' => $statusRaw,
                 'estado_nombre' => $estadoNombre,
             ]);
-            
+
             \Filament\Notifications\Notification::make()
                 ->title('No se puede anular')
                 ->body("No se puede anular una cita en estado: {$estadoNombre}. Solo se pueden anular citas Generadas o Confirmadas.")
@@ -1550,14 +1551,14 @@ class DetalleVehiculo extends Page
 
         // Buscar la cita en la base de datos local para validaciones adicionales
         $appointment = Appointment::where('c4c_uuid', $uuid)->first();
-        
+
         if ($appointment) {
             // Validar estado local también
             if (!in_array($appointment->status, ['pending', 'confirmed', 'generated'])) {
                 Log::warning('[DetalleVehiculo::anularCita] Estado local no válido para anulación', [
                     'local_status' => $appointment->status,
                 ]);
-                
+
                 \Filament\Notifications\Notification::make()
                     ->title('No se puede anular')
                     ->body("El estado local de la cita ({$appointment->status}) no permite la anulación.")
@@ -1578,7 +1579,7 @@ class DetalleVehiculo extends Page
         }
 
         // Mostrar confirmación al usuario
-        $this->dispatch('show-delete-confirmation', 
+        $this->dispatch('show-delete-confirmation',
             $uuid,
             [
                 'numero_cita' => $citaData['numero_cita'] ?? 'N/A',
@@ -1600,13 +1601,13 @@ class DetalleVehiculo extends Page
         try {
             // Buscar el appointment local si existe
             $appointment = Appointment::where('c4c_uuid', $uuid)->first();
-            
+
             // Si no se encuentra por UUID exacto, buscar por patrón similar
             if (!$appointment) {
                 Log::info('[DetalleVehiculo::confirmarAnulacion] UUID exacto no encontrado, buscando por patrón', [
                     'uuid_buscado' => $uuid,
                 ]);
-                
+
                 // Extraer las primeras partes del UUID para búsqueda más flexible
                 // Usamos solo las primeras 3 secciones del UUID para mayor flexibilidad
                 $uuidBase = substr($uuid, 0, 18); // b7d671af-46bb-1fd0
@@ -1614,9 +1615,9 @@ class DetalleVehiculo extends Page
                     'uuid_original' => $uuid,
                     'patron_busqueda' => $uuidBase . '%',
                 ]);
-                
+
                 $appointment = Appointment::where('c4c_uuid', 'LIKE', $uuidBase . '%')->first();
-                
+
                 if ($appointment) {
                     Log::info('[DetalleVehiculo::confirmarAnulacion] Appointment encontrado por patrón UUID', [
                         'uuid_buscado' => $uuid,
@@ -1630,14 +1631,14 @@ class DetalleVehiculo extends Page
                     ]);
                 }
             }
-            
+
             if ($appointment) {
                 // Marcar como en proceso de eliminación
                 $appointment->update([
                     'status' => 'deleting',
                     'c4c_status' => 'deleting',
                 ]);
-                
+
                 Log::info('[DetalleVehiculo::confirmarAnulacion] Appointment marcado como deleting', [
                     'appointment_id' => $appointment->id,
                 ]);
@@ -1648,7 +1649,7 @@ class DetalleVehiculo extends Page
 
             // Generar job ID único para tracking
             $jobId = Str::uuid()->toString();
-            
+
             // Debug: verificar qué appointment se está enviando al job
             $appointmentId = $appointment?->id ?? 0;
             Log::info('[DetalleVehiculo::confirmarAnulacion] Preparando dispatch del job', [
@@ -1884,7 +1885,7 @@ class DetalleVehiculo extends Page
                 $minutos = str_pad($partes[1] ?? '00', 2, '0', STR_PAD_LEFT);
                 return $horas . ':' . $minutos;
             }
-            
+
             // Si viene como "00", mostrar como hora válida
             if ($hora === '00') {
                 return '00:00';
@@ -1903,7 +1904,7 @@ class DetalleVehiculo extends Page
             // Fallback: intentar parsear con Carbon sin conversión de zona horaria
             $horaCarbon = \Carbon\Carbon::createFromFormat('H:i:s', $hora);
             return $horaCarbon->format('H:i');
-            
+
         } catch (\Exception $e) {
             // Si hay algún error, intentar con el formato antiguo como fallback
             try {
@@ -1959,14 +1960,14 @@ class DetalleVehiculo extends Page
             'current_appointment_provided' => !empty($currentAppointmentData),
             'current_appointment_keys' => $currentAppointmentData ? array_keys($currentAppointmentData) : 'null'
         ]);
-        
+
         // Log adicional para ver el contenido completo de currentAppointmentData
         if ($currentAppointmentData) {
             Log::info('📊 [ESTADO-FLOW] Contenido de currentAppointmentData', [
                 'data' => $currentAppointmentData
             ]);
         }
-        
+
         $estados = [
             '1' => [
                 'codigo' => '1',
@@ -2031,7 +2032,7 @@ class DetalleVehiculo extends Page
         ];
 
         $estadoBase = $estados[$appointmentStatus] ?? $estados['1'];
-        
+
         Log::info('📊 [ESTADO-FLOW] Estado base inicial', [
             'codigo' => $estadoBase['codigo'],
             'nombre' => $estadoBase['nombre'],
@@ -2049,12 +2050,12 @@ class DetalleVehiculo extends Page
                     $estadoBase['etapas']['cita_confirmada'] = $frontendStatesFromDB['cita_confirmada'];
                     $estadoBase['etapas']['en_trabajo'] = $frontendStatesFromDB['en_trabajo'];
                     $estadoBase['etapas']['trabajo_concluido'] = $frontendStatesFromDB['trabajo_concluido'];
-                    
+
                     Log::info('📊 [ESTADO-FLOW] Estados frontend cargados desde BD', [
                         'uuid' => $uuid,
                         'etapas' => $estadoBase['etapas']
                     ]);
-                    
+
                     // Retornar el estado con los estados frontend de la BD
                     return $estadoBase;
                 }
@@ -2085,12 +2086,12 @@ class DetalleVehiculo extends Page
     {
         // Log inicial para saber que el método se está ejecutando
         Log::info("[DetalleVehiculo] === INICIO aplicarLogicaSAPAEstado ===");
-        
+
         // Obtener datos de SAP
         $tieneFechaUltServ = $this->datosAsesorSAP['tiene_fecha_ult_serv'] ?? false;
         $tieneFechaFactura = $this->datosAsesorSAP['tiene_fecha_factura'] ?? false;
         $fechaUltServ = $this->datosAsesorSAP['fecha_ult_serv'] ?? null;
-        
+
         // Log detallado de datos SAP para depuración
         Log::info("[DetalleVehiculo] Datos SAP obtenidos para evaluación de estados", [
             'tiene_fecha_ult_serv' => $tieneFechaUltServ ? 'SÍ' : 'NO',
@@ -2099,7 +2100,7 @@ class DetalleVehiculo extends Page
             'fecha_factura' => $this->datosAsesorSAP['fecha_factura'] ?? 'No disponible',
             'datosAsesorSAP_completo' => $this->datosAsesorSAP
         ]);
-        
+
         // Resetear TODOS los estados de frontend independientemente del estado C4C
         // Los estados "en_trabajo" y "trabajo_concluido" deben depender EXCLUSIVAMENTE de los datos SAP
         // El estado C4C solo determina la visibilidad de la cita, no los estados de frontend
@@ -2107,14 +2108,14 @@ class DetalleVehiculo extends Page
         $estadoBase['etapas']['en_trabajo']['completado'] = false;
         $estadoBase['etapas']['trabajo_concluido']['activo'] = false;
         $estadoBase['etapas']['trabajo_concluido']['completado'] = false;
-        
+
         Log::info("[DetalleVehiculo] Estados de frontend reseteados - independientes de estado C4C", [
             'estado_c4c' => $estadoBase['codigo'],
             'nombre_c4c' => $estadoBase['nombre'],
             'en_trabajo_activo' => $estadoBase['etapas']['en_trabajo']['activo'] ? 'SÍ' : 'NO',
             'trabajo_concluido_activo' => $estadoBase['etapas']['trabajo_concluido']['activo'] ? 'SÍ' : 'NO',
         ]);
-        
+
         // Usar los datos de la cita actual si están disponibles
         $fechaCitaActual = null;
         if ($currentAppointmentData) {
@@ -2124,7 +2125,7 @@ class DetalleVehiculo extends Page
             } elseif (isset($currentAppointmentData['appointment_date'])) {
                 $fechaCitaActual = $currentAppointmentData['appointment_date'];
             }
-            
+
             // Normalizar fecha si se obtuvo
             if ($fechaCitaActual) {
                 // Si es objeto Carbon, convertir a string
@@ -2137,20 +2138,20 @@ class DetalleVehiculo extends Page
                 }
             }
         }
-        
+
         // FALLBACK: Solo si no se obtuvo fecha de currentAppointmentData, usar método anterior
         if (!$fechaCitaActual) {
             // Obtener la fecha de la cita del array de citas transformado
             $citaActual = $this->citasAgendadas[0] ?? null;
-            
+
             // Intentar obtener el ID de diferentes maneras
             $citaId = null;
             $candidatosId = [];
-            
+
             // 1. Verificar si el ID está en el formato numérico directo
             if (isset($citaActual['id']) && is_numeric($citaActual['id'])) {
                 $candidatosId[] = (int)$citaActual['id'];
-            } 
+            }
             // 2. Verificar si el ID está en el formato 'local-123'
             elseif (isset($citaActual['id']) && strpos($citaActual['id'], 'local-') === 0) {
                 $candidatosId[] = (int)substr($citaActual['id'], 6);
@@ -2163,7 +2164,7 @@ class DetalleVehiculo extends Page
                     $candidatosId[] = (int)substr($citaActual['numero_cita'], 5);
                 }
             }
-            
+
             // Buscar cita en la base de datos
             foreach ($candidatosId as $index => $id) {
                 $citaLocal = \App\Models\Appointment::find($id);
@@ -2172,7 +2173,7 @@ class DetalleVehiculo extends Page
                     break; // Usar el primer ID que encuentre
                 }
             }
-            
+
             // Si no se pudo obtener de la base de datos local, usar el valor del array
             if (!$fechaCitaActual) {
                 $fechaCitaActual = $citaActual['fecha_cita'] ?? null;
@@ -2188,55 +2189,55 @@ class DetalleVehiculo extends Page
                 }
             }
         }
-        
+
         // Asegurarse de que las fechas estén en el mismo formato para comparación (YYYY-MM-DD)
         if ($fechaUltServ) {
             $fechaUltServ = substr($fechaUltServ, 0, 10);
         }
-        
+
         if ($fechaCitaActual) {
             $fechaCitaActual = substr($fechaCitaActual, 0, 10);
         }
-        
+
         // Log para verificar las fechas que se están usando
         Log::info("[DetalleVehiculo] Fechas para evaluación", [
             'fecha_ult_serv' => $fechaUltServ ?? 'No disponible',
             'fecha_cita_actual' => $fechaCitaActual ?? 'No disponible'
         ]);
-        
+
         // CASO 1: TRABAJO CONCLUIDO - Si tiene fecha de factura y es MAYOR O IGUAL a la fecha de cita
         Log::info("[DetalleVehiculo] Evaluando estado TRABAJO CONCLUIDO", [
             'tiene_fecha_factura' => $tieneFechaFactura ? 'SÍ' : 'NO'
         ]);
-        
+
         if ($tieneFechaFactura) {
             $fechaFactura = $this->datosAsesorSAP['fecha_factura'] ?? '';
-            
+
             Log::info("[DetalleVehiculo] Evaluando trabajo concluido con fechas", [
                 'fecha_factura' => $fechaFactura,
                 'fecha_cita_actual' => $fechaCitaActual
             ]);
-            
+
             // Verificar que la fecha de factura sea mayor o igual a la fecha de cita
-            if ($fechaFactura && $fechaCitaActual && 
+            if ($fechaFactura && $fechaCitaActual &&
                 $this->fechaSAPMayorOIgualACita($fechaFactura, $fechaCitaActual)) {
-                
+
                 $estadoBase['etapas']['cita_confirmada']['activo'] = false;
                 $estadoBase['etapas']['cita_confirmada']['completado'] = true;
-                
+
                 $estadoBase['etapas']['en_trabajo']['activo'] = false;
                 $estadoBase['etapas']['en_trabajo']['completado'] = true;
-                
+
                 $estadoBase['etapas']['trabajo_concluido']['activo'] = true;
                 $estadoBase['etapas']['trabajo_concluido']['completado'] = true;
-                
+
                 // Log para depuración de trabajo concluido
                 Log::info("[DetalleVehiculo] Estado 'Trabajo concluido' activado por fecha de factura mayor o igual a fecha de cita", [
-                    'fecha_factura' => $fechaFactura, 
+                    'fecha_factura' => $fechaFactura,
                     'fecha_cita' => $fechaCitaActual,
                     'evaluacion' => 'Fecha de factura SAP mayor o igual a la fecha de cita'
                 ]);
-                
+
                 return $estadoBase;
             }
             // Si tiene fecha de factura pero NO cumple la condición, resetear estado
@@ -2244,20 +2245,20 @@ class DetalleVehiculo extends Page
                 // Resetear a estado por defecto basado en el appointmentStatus original
                 // Mantener el estado original del appointment
                 Log::info("[DetalleVehiculo] Estado 'Trabajo concluido' NO activado: fecha factura NO es mayor o igual a fecha cita", [
-                    'fecha_factura' => $fechaFactura, 
+                    'fecha_factura' => $fechaFactura,
                     'fecha_cita' => $fechaCitaActual
                 ]);
             }
         } else {
             Log::info("[DetalleVehiculo] No se evalúa trabajo concluido porque no tiene fecha de factura");
         }
-        
+
         // CASO 2: EN TRABAJO - Si tiene fecha de servicio reciente que coincide con la fecha de cita
         Log::info("[DetalleVehiculo] Evaluando estado EN TRABAJO", [
             'tiene_fecha_ult_serv' => $tieneFechaUltServ ? 'SÍ' : 'NO',
             'fecha_ult_serv' => $fechaUltServ ?? 'No disponible'
         ]);
-        
+
         if ($tieneFechaUltServ && $fechaUltServ) {
             // Verificar si la fecha de servicio es igual a la fecha de la cita
             Log::info("[DetalleVehiculo] Evaluando si fecha de servicio coincide con fecha de cita", [
@@ -2267,28 +2268,28 @@ class DetalleVehiculo extends Page
                 'fecha_ult_serv_normalizada' => $this->normalizarFecha($fechaUltServ),
                 'fecha_cita_normalizada' => $this->normalizarFecha($fechaCitaActual)
             ]);
-            
+
             // Usando normalización de fechas para comparación más confiable
             $fechaUltServNormalizada = $this->normalizarFecha($fechaUltServ);
             $fechaCitaNormalizada = $this->normalizarFecha($fechaCitaActual);
-            
-            if ($fechaCitaActual && $fechaUltServNormalizada && $fechaCitaNormalizada && 
+
+            if ($fechaCitaActual && $fechaUltServNormalizada && $fechaCitaNormalizada &&
                 $fechaUltServNormalizada === $fechaCitaNormalizada) {
                 $estadoBase['etapas']['cita_confirmada']['activo'] = false;
                 $estadoBase['etapas']['cita_confirmada']['completado'] = true;
-                
+
                 $estadoBase['etapas']['en_trabajo']['activo'] = true;
                 $estadoBase['etapas']['en_trabajo']['completado'] = false;
-                
+
                 $estadoBase['etapas']['trabajo_concluido']['activo'] = false;
                 $estadoBase['etapas']['trabajo_concluido']['completado'] = false;
-                
+
                 // Log para depuración de en trabajo
                 Log::info("[DetalleVehiculo] Estado 'En trabajo' activado y 'Trabajo concluido' desactivado", [
-                    'fecha_ult_serv' => $fechaUltServ, 
+                    'fecha_ult_serv' => $fechaUltServ,
                     'fecha_cita' => $fechaCitaActual
                 ]);
-                
+
                 return $estadoBase;
             } else {
                 // Log para depuración cuando no coinciden las fechas
@@ -2306,21 +2307,21 @@ class DetalleVehiculo extends Page
                 'fecha_ult_serv' => $fechaUltServ ?? 'No disponible'
             ]);
         }
-        
+
         // Si no se ha aplicado ningún estado especial, mantener el estado reseteado
         Log::info("[DetalleVehiculo] No se ha aplicado ningún estado especial SAP, manteniendo estado reseteado", [
             'tiene_fecha_ult_serv' => $tieneFechaUltServ ? 'SÍ' : 'NO',
             'fecha_ult_serv' => $fechaUltServ ?? 'No disponible',
-            'tiene_fecha_factura' => $tieneFechaFactura ? 'SÍ' : 'NO', 
+            'tiene_fecha_factura' => $tieneFechaFactura ? 'SÍ' : 'NO',
             'fecha_cita_actual' => $fechaCitaActual ?? 'No disponible',
             'comparacion_fecha_ult_serv_igual_cita' => ($fechaCitaActual && $fechaUltServ == $fechaCitaActual) ? 'SÍ' : 'NO'
         ]);
-        
+
         Log::info("[DetalleVehiculo] === FIN aplicarLogicaSAPAEstado ===");
-        
+
         return $estadoBase;
     }
-    
+
     /**
      * Compara si dos fechas son iguales, independientemente de su formato
      * @param string|null $fechaSAP Fecha de SAP (formato YYYY-MM-DD)
@@ -2338,7 +2339,7 @@ class DetalleVehiculo extends Page
             $carbonSAP = null;
             $carbonCita = null;
             $formatos = ['Y-m-d', 'd/m/Y', 'Y-m-d H:i:s', 'd/m/Y H:i:s', 'Ymd'];
-            
+
             // Intentar parsear fecha SAP
             foreach ($formatos as $formato) {
                 try {
@@ -2349,7 +2350,7 @@ class DetalleVehiculo extends Page
                     continue;
                 }
             }
-            
+
             // Intentar parsear fecha Cita
             foreach ($formatos as $formato) {
                 try {
@@ -2360,7 +2361,7 @@ class DetalleVehiculo extends Page
                     continue;
                 }
             }
-            
+
             // Si no se pudo parsear alguna fecha, intentar con parse genérico
             if (!$carbonSAP) {
                 try {
@@ -2369,7 +2370,7 @@ class DetalleVehiculo extends Page
                     // No se pudo parsear
                 }
             }
-            
+
             if (!$carbonCita) {
                 try {
                     $carbonCita = \Carbon\Carbon::parse($fechaCita);
@@ -2377,20 +2378,20 @@ class DetalleVehiculo extends Page
                     // No se pudo parsear
                 }
             }
-            
+
             if (!$carbonSAP || !$carbonCita) {
                 return false;
             }
-            
+
             // Normalizar a fecha sin hora para comparación
             $fechaSAPNormalizada = $carbonSAP->format('Y-m-d');
             $fechaCitaNormalizada = $carbonCita->format('Y-m-d');
-            
+
             // Comparar las fechas normalizadas
             $coinciden = $fechaSAPNormalizada === $fechaCitaNormalizada;
-            
+
             return $coinciden;
-            
+
         } catch (\Exception $e) {
             return false;
         }
@@ -2408,7 +2409,7 @@ class DetalleVehiculo extends Page
             'fecha_sap_original' => $fechaSAP,
             'fecha_cita_original' => $fechaCita
         ]);
-        
+
         if (empty($fechaSAP) || empty($fechaCita)) {
             Log::warning('[DetalleVehiculo] Una de las fechas está vacía', [
                 'fecha_sap' => $fechaSAP,
@@ -2421,12 +2422,12 @@ class DetalleVehiculo extends Page
             // Normalizar fechas al formato Y-m-d
             $fechaSAPNormalizada = $this->normalizarFecha($fechaSAP);
             $fechaCitaNormalizada = $this->normalizarFecha($fechaCita);
-            
+
             Log::info('[DetalleVehiculo] Fechas normalizadas para comparación', [
                 'fecha_sap_normalizada' => $fechaSAPNormalizada,
                 'fecha_cita_normalizada' => $fechaCitaNormalizada
             ]);
-            
+
             if (!$fechaSAPNormalizada || !$fechaCitaNormalizada) {
                 Log::warning('[DetalleVehiculo] No se pudo normalizar alguna de las fechas', [
                     'fecha_sap_original' => $fechaSAP,
@@ -2438,10 +2439,10 @@ class DetalleVehiculo extends Page
             // Comparación explícita usando strcmp para fechas en formato Y-m-d (YYYY-MM-DD)
             // De esta manera evitamos cualquier problema con Carbon o zonas horarias
             $resultado = strcmp($fechaSAPNormalizada, $fechaCitaNormalizada);
-            
+
             // resultado >= 0 significa que fechaSAP es igual o mayor que fechaCita
             $esMayorOIgual = $resultado >= 0;
-            
+
             // Mejoramos el log para depuración con valores exactos
             Log::info('[DetalleVehiculo] Comparación de fechas para Trabajo concluido', [
                 'fecha_sap' => $fechaSAPNormalizada,
@@ -2450,9 +2451,9 @@ class DetalleVehiculo extends Page
                 'resultado_strcmp' => $resultado,
                 'razon' => $resultado == 0 ? 'Fechas iguales' : ($resultado > 0 ? 'Fecha SAP mayor que fecha cita' : 'Fecha SAP menor que fecha cita')
             ]);
-            
+
             return $esMayorOIgual;
-            
+
         } catch (\Exception $e) {
             Log::error('[DetalleVehiculo] Error comparando fechas', [
                 'error' => $e->getMessage(),
@@ -2462,7 +2463,7 @@ class DetalleVehiculo extends Page
             return false;
         }
     }
-    
+
     /**
      * Normaliza una fecha a formato Y-m-d para comparaciones consistentes
      * @param string|null $fecha La fecha en cualquier formato
@@ -2473,12 +2474,12 @@ class DetalleVehiculo extends Page
         if (empty($fecha)) {
             return null;
         }
-        
+
         Log::info('[DetalleVehiculo] Normalizando fecha', [
             'fecha_original' => $fecha,
             'tipo' => gettype($fecha)
         ]);
-        
+
         // Si ya tiene formato Y-m-d, retornarlo directamente
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
             Log::info('[DetalleVehiculo] Fecha ya en formato Y-m-d, retornando directamente', [
@@ -2486,7 +2487,7 @@ class DetalleVehiculo extends Page
             ]);
             return $fecha;
         }
-        
+
         // Si tiene formato d/m/Y, convertirlo
         if (preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $fecha)) {
             try {
@@ -2507,7 +2508,7 @@ class DetalleVehiculo extends Page
                 ]);
             }
         }
-        
+
         // Intentar con Carbon en diferentes formatos
         $formatos = ['Y-m-d', 'd/m/Y', 'Ymd', 'Y-m-d H:i:s', 'd/m/Y H:i:s'];
         foreach ($formatos as $formato) {
@@ -2526,7 +2527,7 @@ class DetalleVehiculo extends Page
                 continue;
             }
         }
-        
+
         // Último intento con parse genérico
         try {
             $fechaObj = \Carbon\Carbon::parse($fecha);
@@ -2567,19 +2568,19 @@ class DetalleVehiculo extends Page
             } else {
                 $citaEnriquecida['asesor'] = 'Por asignar';
             }
-            
+
             if (!empty($this->datosAsesorSAP['telefono_asesor'])) {
                 $citaEnriquecida['whatsapp'] = $this->datosAsesorSAP['telefono_asesor'];
             } else {
                 $citaEnriquecida['whatsapp'] = 'Por asignar';
             }
-            
+
             if (!empty($this->datosAsesorSAP['correo_asesor'])) {
                 $citaEnriquecida['correo'] = $this->datosAsesorSAP['correo_asesor'];
             } else {
                 $citaEnriquecida['correo'] = 'Por asignar';
             }
-            
+
             // Formatear fecha y hora de entrega SAP solo si son válidas
             if ($this->datosAsesorSAP['tiene_fecha_entrega']) {
                 $fechaEntrega = $this->formatearFechaSAP($this->datosAsesorSAP['fecha_entrega']);
@@ -2588,7 +2589,7 @@ class DetalleVehiculo extends Page
             } else {
                 $citaEnriquecida['probable_entrega'] = 'Por asignar';
             }
-            
+
             // Si hay fecha de factura SAP válida, agregar datos de facturación
             if ($this->datosAsesorSAP['tiene_fecha_factura']) {
                 $citaEnriquecida['fecha_factura'] = $this->formatearFechaSAP($this->datosAsesorSAP['fecha_factura']);
@@ -3076,10 +3077,10 @@ class DetalleVehiculo extends Page
 
             $parametros = ['PI_PLACA' => $placa];
             $respuesta = $cliente->Z3PF_GETDATOSASESORPROCESO($parametros);
-            
+
             // Capturar XML raw para extracción manual de campos
             $xmlResponse = $cliente->__getLastResponse();
-            
+
             Log::info('[DetalleVehiculo] Respuesta SAP asesor:', (array) $respuesta);
 
 
@@ -3094,7 +3095,7 @@ class DetalleVehiculo extends Page
             $horaFactura = $respuesta->PE_HOR_FACTURA ?? '';
             $rutPdf = $respuesta->PE_RUT_PDF ?? '';
             $fechaUltServ = $respuesta->PE_FEC_ULT_SERV ?? '';
-            
+
             // Extraer PE_FEC_ULT_SERV del XML si no está en el objeto (problema de parsing PHP)
             if (empty($fechaUltServ) && !empty($xmlResponse)) {
                 if (preg_match('/<PE_FEC_ULT_SERV[^>]*>([^<]*)<\/PE_FEC_ULT_SERV>/', $xmlResponse, $matches)) {
@@ -3173,7 +3174,7 @@ class DetalleVehiculo extends Page
                 $items = is_array($respuesta->PE_SERV_PREPAGO->item)
                     ? $respuesta->PE_SERV_PREPAGO->item
                     : [$respuesta->PE_SERV_PREPAGO->item];
-            
+
                 foreach ($items as $item) {
                     if (isset($item->MAKTX) && !empty($item->MAKTX)) {
                         $prepagosDisponibles[] = $item->MAKTX;
@@ -3347,6 +3348,19 @@ class DetalleVehiculo extends Page
                 'customer_email' => $appointment->customer_email,
             ]);
 
+            // Enviar notificación WhatsApp de cancelación
+            app(AppointmentWhatsappService::class)->sendAppointmentCancelled(
+                $appointment,
+                $datosCliente,
+                $datosVehiculo,
+                $motivoCancelacion
+            );
+
+            Log::info('📲 [WhatsApp] Notificación de cita cancelada enviada exitosamente', [
+                'appointment_id' => $appointment->id,
+                'customer_phone' => $appointment->customer_phone,
+            ]);
+
         } catch (\Exception $e) {
             Log::error('📧 [CitaCancelada] Error enviando email de cita cancelada', [
                 'appointment_id' => $appointment->id,
@@ -3354,7 +3368,7 @@ class DetalleVehiculo extends Page
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            
+
             // No lanzar excepción para no interrumpir el proceso de cancelación
             // Solo registrar el error
         }

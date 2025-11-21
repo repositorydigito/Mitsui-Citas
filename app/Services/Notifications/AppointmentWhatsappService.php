@@ -7,9 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 class AppointmentWhatsappService
 {
-    /**
-     * Enviar notificación WhatsApp para cita CREADA
-     */
+    /* Enviar notificación WhatsApp para cita CREADA */
     public function sendAppointmentCreated(Appointment $appointment, array $cliente, array $vehiculo): void
     {
         $contentSid = config('services.twilio.register_appointment');
@@ -18,9 +16,7 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'CREADA');
     }
 
-    /**
-     * Enviar notificación WhatsApp para cita REPROGRAMADA
-     */
+    /* Enviar notificación WhatsApp para cita REPROGRAMADA */
     public function sendAppointmentRescheduled(Appointment $appointment, array $cliente, array $vehiculo, array $cambiosRealizados): void
     {
         $contentSid = config('services.twilio.register_rescheduled');
@@ -29,9 +25,16 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'REPROGRAMADA');
     }
 
-    /**
-     * Lógica común de envío a Twilio (DRY principle)
-     */
+    /* Enviar notificación WhatsApp para cita CANCELADA */
+    public function sendAppointmentCancelled(Appointment $appointment, array $cliente, array $vehiculo, string $motivoCancelacion): void
+    {
+        $contentSid = config('services.twilio.register_annulled');
+        $variables = $this->buildCancelledVariables($appointment, $cliente, $vehiculo, $motivoCancelacion);
+
+        $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'CANCELADA');
+    }
+
+    /* Lógica común de envío a Twilio */
     protected function sendWhatsAppNotification(Appointment $appointment, string $contentSid, array $variables, string $templateType): void
     {
         $accountSid = config('services.twilio.account_sid');
@@ -77,9 +80,7 @@ class AppointmentWhatsappService
         ]);
     }
 
-    /**
-     * Construir variables para template de cita creada
-     */
+    /* Construir variables para template de cita creada */
     protected function buildContentVariables(Appointment $appointment, array $cliente, array $vehiculo): array
     {
         return [
@@ -93,19 +94,31 @@ class AppointmentWhatsappService
         ];
     }
 
-    /**
-     * Construir variables para template de cita reprogramada
-     */
+    /* Construir variables para template de cita reprogramada */
     protected function buildRescheduledVariables(Appointment $appointment, array $cliente, array $vehiculo, array $cambiosRealizados): array
     {
 
         return [
             '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
-            '2' => $cambiosRealizados['Fecha']['nuevo'] ?? $appointment->appointment_date ?? '',
-            '3' => $cambiosRealizados['Hora']['nuevo'] ?? $appointment->appointment_time ?? '',
+            '2' => $cambiosRealizados['Fecha']['nuevo'] . ' ' . $cambiosRealizados['Hora']['nuevo'],
+            '3' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
             '4' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?? '',
             '5' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
-            '6' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
+            '6' => $appointment->maintenance_type ?? '',
+            '7' => $appointment->comments ?? '',
+        ];
+    }
+
+    /* Construir variables para template de cita cancelada */
+    protected function buildCancelledVariables(Appointment $appointment, array $cliente, array $vehiculo, string $motivoCancelacion): array
+    {
+        return [
+            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '2' => trim(($appointment->appointment_date ?? '') . ' ' . ($appointment->appointment_time ?? '')),
+            '3' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
+            '4' => $appointment->premise->name ?? '',
+            '5' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '6' => $appointment->maintenance_type ?? '',
             '7' => $appointment->comments ?? '',
         ];
     }

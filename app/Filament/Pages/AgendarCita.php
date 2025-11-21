@@ -4589,6 +4589,7 @@ class AgendarCita extends Page
                 'customer_email' => $appointment->customer_email,
             ]);
 
+
         } catch (\Exception $e) {
             Log::error('📧 [CitaCancelada] Error enviando email de cita cancelada', [
                 'appointment_id' => $appointment->id,
