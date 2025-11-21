@@ -90,22 +90,21 @@ class AppointmentWhatsappService
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
             '5' => $appointment->premise->name ?? '',
             '6' => $appointment->maintenance_type ?? '',
-            '7' => $appointment->comments ?? '',
+            '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
     /* Construir variables para template de cita reprogramada */
     protected function buildRescheduledVariables(Appointment $appointment, array $cliente, array $vehiculo, array $cambiosRealizados): array
     {
-
         return [
             '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
             '2' => $cambiosRealizados['Fecha']['nuevo'] . ' ' . $cambiosRealizados['Hora']['nuevo'],
-            '3' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
-            '4' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?? '',
-            '5' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
+            '5' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?? '',
             '6' => $appointment->maintenance_type ?? '',
-            '7' => $appointment->comments ?? '',
+            '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
@@ -115,11 +114,11 @@ class AppointmentWhatsappService
         return [
             '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
             '2' => trim(($appointment->appointment_date ?? '') . ' ' . ($appointment->appointment_time ?? '')),
-            '3' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
-            '4' => $appointment->premise->name ?? '',
-            '5' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
+            '5' => $appointment->premise->name ?? '',
             '6' => $appointment->maintenance_type ?? '',
-            '7' => $appointment->comments ?? '',
+            '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 }
