@@ -48,4 +48,14 @@ return [
         'password' => env('SAP_3P_PASSWORD', 'Srv0103$MrvTk%'),
     ],
 
+    'twilio' => [
+        'account_sid' => env('TWILIO_ACCOUNT_SID'),
+        'auth_token' => env('TWILIO_AUTH_TOKEN'),
+        'whatsapp_from' => env('TWILIO_WHATSAPP_FROM'),
+        'register_appointment' => env('TWILIO_WHATSAPP_REGISTER_APPOINTMENT'),
+        'register_rescheduled' => env('TWILIO_WHATSAPP_REGISTER_RESCHEDULED'),
+        'register_annulled' => env('TWILIO_WHATSAPP_REGISTER_ANNULLED'),
+        'register_reminder' => env('TWILIO_WHATSAPP_REGISTER_REMINDER')
+    ],
+
 ];

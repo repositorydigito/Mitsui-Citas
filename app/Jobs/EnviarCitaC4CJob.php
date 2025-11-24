@@ -530,6 +530,15 @@ class EnviarCitaC4CJob implements ShouldQueue
                 'appointment_number' => $appointment->appointment_number
             ]);
 
+            // Enviar notificacion Whastsapp de creada
+            app(\App\Services\Notifications\AppointmentWhatsappService::class)
+                ->sendAppointmentCreated($appointment, $datosCliente, $datosVehiculo);
+
+            Log::info('📲 [EnviarCitaC4CJob] Notificación WhatsApp disparada', [
+                'appointment_id' => $appointment->id,
+                'to_phone' => $appointment->customer_phone,
+            ]);
+
         } catch (\Exception $e) {
             Log::error('📧 [EnviarCitaC4CJob] ❌ ERROR ENVIANDO EMAIL DE CONFIRMACIÓN', [
                 'appointment_id' => $appointment->id,

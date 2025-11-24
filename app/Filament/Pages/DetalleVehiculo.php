@@ -3347,6 +3347,19 @@ class DetalleVehiculo extends Page
                 'customer_email' => $appointment->customer_email,
             ]);
 
+            // Enviar notificación WhatsApp de cancelación
+            app(\App\Services\Notifications\AppointmentWhatsappService::class)->sendAppointmentCancelled(
+                $appointment,
+                $datosCliente,
+                $datosVehiculo,
+                $motivoCancelacion
+            );
+
+            Log::info('📲 [WhatsApp] Notificación de cita cancelada enviada exitosamente', [
+                'appointment_id' => $appointment->id,
+                'customer_phone' => $appointment->customer_phone,
+            ]);
+
         } catch (\Exception $e) {
             Log::error('📧 [CitaCancelada] Error enviando email de cita cancelada', [
                 'appointment_id' => $appointment->id,

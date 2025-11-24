@@ -4860,6 +4860,32 @@ class AgendarCita extends Page
         ];
         $this->enviarEmailCitaEditada($appointment, $cambiosRealizados);
 
+        // Enviar notificación WhatsApp de reprogramación
+        $datosCliente = [
+            'nombres' => $this->nombreCliente,
+            'apellidos' => $this->apellidoCliente,
+            'email' => $this->emailCliente,
+            'celular' => $this->celularCliente,
+        ];
+
+        $datosVehiculo = [
+            'marca' => $this->vehiculo['marca'] ?? 'No especificado',
+            'modelo' => $this->vehiculo['modelo'] ?? 'No especificado',
+            'placa' => $this->vehiculo['placa'] ?? 'No especificado',
+        ];
+
+        app(\App\Services\Notifications\AppointmentWhatsappService::class)->sendAppointmentRescheduled(
+            $appointment,
+            $datosCliente,
+            $datosVehiculo,
+            $cambiosRealizados
+        );
+
+        Log::info('📧 [CitaEditada] Email de cita editada enviado exitosamente', [
+            'appointment_id' => $appointment->id,
+            'customer_email' => $appointment->customer_email,
+        ]);
+
         // **PASO 3: GENERAR JOB ID** (exacto como guardarCita línea 1690)
         $this->citaJobId = (string) Str::uuid();
 
