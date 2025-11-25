@@ -1,5 +1,23 @@
 <?php
 
+/**
+ * MODIFICACIONES REALIZADAS:
+ * 
+ * ✅ BUG FIX - Package ID no se recalculaba al cambiar servicios
+ * Modificado por: Pablo Aguero
+ * Fecha: $(date)
+ * 
+ * Problema: Cuando el usuario seleccionaba mantenimiento, luego lo deseleccionaba
+ * y escogía otros servicios, el sistema enviaba a C4C el package_id del primer
+ * servicio (el descartado) en lugar del servicio final seleccionado.
+ * 
+ * Solución: Agregadas llamadas a obtenerPaqueteId() en:
+ * - toggleServicio() - línea ~944
+ * - updatedServicioAdicionalSeleccionado() - línea ~1367
+ * - eliminarServicioAdicional() - línea ~1386
+ * - updatedCampanaSeleccionada() - línea ~1399
+ */
+
 namespace App\Filament\Pages;
 
 use App\Jobs\EnviarCitaC4CJob;
@@ -942,6 +960,10 @@ class AgendarCita extends Page
         }
 
         Log::info('[AgendarCita] Servicios seleccionados actualizados: ' . json_encode($this->serviciosSeleccionados));
+        
+        // ✅ FIX BUG: Recalcular package_id cuando cambian los servicios seleccionados
+        // Modificado por Pablo Aguero - Corrige bug donde package_id no se actualiza al cambiar servicios
+        $this->obtenerPaqueteId();
     }
 
     /**
@@ -1357,6 +1379,10 @@ class AgendarCita extends Page
 
             // Actualizar servicios extras elegidos
             $this->actualizarServiciosExtrasElegidos();
+            
+            // ✅ FIX BUG: Recalcular package_id cuando se agregan servicios adicionales
+            // Modificado por Pablo Aguero - Corrige bug donde package_id no se actualiza al agregar servicios
+            $this->obtenerPaqueteId();
         }
     }
 
@@ -1372,6 +1398,10 @@ class AgendarCita extends Page
 
         // Actualizar servicios extras elegidos
         $this->actualizarServiciosExtrasElegidos();
+        
+        // ✅ FIX BUG: Recalcular package_id cuando se eliminan servicios adicionales
+        // Modificado por Pablo Aguero - Corrige bug donde package_id no se actualiza al eliminar servicios
+        $this->obtenerPaqueteId();
     }
 
     /**
@@ -1381,6 +1411,10 @@ class AgendarCita extends Page
     {
         // Actualizar servicios extras elegidos
         $this->actualizarServiciosExtrasElegidos();
+        
+        // ✅ FIX BUG: Recalcular package_id cuando se seleccionan campañas
+        // Modificado por Pablo Aguero - Corrige bug donde package_id no se actualiza al seleccionar campañas
+        $this->obtenerPaqueteId();
     }
 
     /**
