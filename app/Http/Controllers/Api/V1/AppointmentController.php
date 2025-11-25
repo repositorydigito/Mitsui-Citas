@@ -243,7 +243,7 @@ class AppointmentController extends Controller
             ];
 
             // Despachar jobs
-            EnviarCitaC4CJob::dispatch($citaData, $appointmentData, $jobId, $appointment->id);
+            EnviarCitaC4CJob::dispatch($citaData, $appointmentData, $jobId, $appointment->id, false);
 
             ProcessAppointmentAfterCreationJob::dispatch($appointment->id)
                 ->delay(now()->addMinutes(1));

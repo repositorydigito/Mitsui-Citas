@@ -2501,7 +2501,7 @@ class AgendarCita extends Page
             ], 600); // 10 minutos
 
             // **PASO 4: DESPACHAR JOB EN BACKGROUND** 🚀
-            EnviarCitaC4CJob::dispatch($citaData, $appointmentData, $this->citaJobId, $appointment->id);
+            EnviarCitaC4CJob::dispatch($citaData, $appointmentData, $this->citaJobId, $appointment->id, false);
 
             ProcessAppointmentAfterCreationJob::dispatch($appointment->id)
                 ->delay(now()->addMinutes(1)); // Delay para que la cita se procese primero
@@ -4904,7 +4904,7 @@ class AgendarCita extends Page
         ], 600); // 10 minutos
 
         // **PASO 6: DESPACHAR JOB EN BACKGROUND** (exacto como guardarCita líneas 1807-1810)
-        EnviarCitaC4CJob::dispatch($citaData, $appointmentData, $this->citaJobId, $appointment->id);
+        EnviarCitaC4CJob::dispatch($citaData, $appointmentData, $this->citaJobId, $appointment->id, true);
 
         ProcessAppointmentAfterCreationJob::dispatch($appointment->id)
             ->delay(now()->addMinutes(1)); // Delay para que la cita se procese primero
