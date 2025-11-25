@@ -5,6 +5,7 @@ namespace App\Services\Notifications;
 use App\Models\Appointment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+
 class AppointmentWhatsappService
 {
     /* Enviar notificación WhatsApp para cita CREADA */
@@ -83,9 +84,14 @@ class AppointmentWhatsappService
     /* Construir variables para template de cita creada */
     protected function buildContentVariables(Appointment $appointment, array $cliente, array $vehiculo): array
     {
+        // Formatear fecha y hora
+        $fechaFormateada = \Carbon\Carbon::parse($appointment->appointment_date)->format('d/m/Y');
+        $horaFormateada = \Carbon\Carbon::parse($appointment->appointment_time)->format('H:i');
+        $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
+
         return [
             '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
-            '2' => trim(($appointment->appointment_date ?? '') . ' ' . ($appointment->appointment_time ?? '')),
+            '2' => $fechaHora,
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
             '5' => $appointment->premise->name ?? '',
@@ -99,7 +105,7 @@ class AppointmentWhatsappService
     {
         return [
             '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
-            '2' => $cambiosRealizados['Fecha']['nuevo'] . ' ' . $cambiosRealizados['Hora']['nuevo'],
+            '2' => $cambiosRealizados['Fecha']['nuevo'] . ' a las ' . $cambiosRealizados['Hora']['nuevo'],
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
             '5' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?? '',
@@ -111,9 +117,14 @@ class AppointmentWhatsappService
     /* Construir variables para template de cita cancelada */
     protected function buildCancelledVariables(Appointment $appointment, array $cliente, array $vehiculo, string $motivoCancelacion): array
     {
+        // Formatear fecha y hora con formato estándar: dd/mm/yyyy a las HH:mm
+        $fechaFormateada = \Carbon\Carbon::parse($appointment->appointment_date)->format('d/m/Y');
+        $horaFormateada = \Carbon\Carbon::parse($appointment->appointment_time)->format('H:i');
+        $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
+
         return [
             '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
-            '2' => trim(($appointment->appointment_date ?? '') . ' ' . ($appointment->appointment_time ?? '')),
+            '2' => $fechaHora,
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
             '5' => $appointment->premise->name ?? '',
