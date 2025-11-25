@@ -27,6 +27,8 @@ class EnviarCitaC4CJob implements ShouldQueue
 
     public int $appointmentId;
 
+    public bool $isRescheduled;
+        
     /**
      * Tiempo de vida del job en segundos
      */
@@ -37,12 +39,13 @@ class EnviarCitaC4CJob implements ShouldQueue
      */
     public int $tries = 3;
 
-    public function __construct(array $citaData, array $appointmentData, string $jobId, int $appointmentId)
+    public function __construct(array $citaData, array $appointmentData, string $jobId, int $appointmentId, bool $isRescheduled)
     {
         $this->citaData = $citaData;
         $this->appointmentData = $appointmentData;
         $this->jobId = $jobId;
         $this->appointmentId = $appointmentId;
+        $this->isRescheduled = $isRescheduled;
     }
 
     public function handle(): void
@@ -463,6 +466,15 @@ class EnviarCitaC4CJob implements ShouldQueue
      */
     protected function enviarEmailConfirmacion(Appointment $appointment): void
     {
+        // ✅ PREVENIR DUPLICACIÓN: Si es reprogramada, saltar notificaciones
+        if ($this->isRescheduled) {
+            Log::info('📧📲 [EnviarCitaC4CJob] SALTANDO notificaciones - cita reprogramada', [
+                'appointment_id' => $appointment->id,
+                'reason' => 'Notificaciones ya enviadas desde AgendarCita::enviarEmailCitaEditada()',
+            ]);
+            return;
+        }
+
         try {
             // 🔍 LOG DETALLADO PARA DIAGNÓSTICO
             Log::info('📧 [EnviarCitaC4CJob] ========== INICIANDO ENVÍO EMAIL ==========', [
