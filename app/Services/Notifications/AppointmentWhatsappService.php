@@ -35,6 +35,15 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'CANCELADA');
     }
 
+    /* Enviar notificación WhatsApp de RECORDATORIO de cita */
+    public function sendAppointmentReminder(Appointment $appointment, array $cliente, array $vehiculo): void
+    {
+        $contentSid = config('services.twilio.register_reminder');
+        $variables = $this->buildReminderVariables($appointment, $cliente, $vehiculo);
+
+        $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'RECORDATORIO');
+    }
+
     /* Lógica común de envío a Twilio */
     protected function sendWhatsAppNotification(Appointment $appointment, string $contentSid, array $variables, string $templateType): void
     {
@@ -118,6 +127,25 @@ class AppointmentWhatsappService
     protected function buildCancelledVariables(Appointment $appointment, array $cliente, array $vehiculo, string $motivoCancelacion): array
     {
         // Formatear fecha y hora con formato estándar: dd/mm/yyyy a las HH:mm
+        $fechaFormateada = \Carbon\Carbon::parse($appointment->appointment_date)->format('d/m/Y');
+        $horaFormateada = \Carbon\Carbon::parse($appointment->appointment_time)->format('H:i');
+        $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
+
+        return [
+            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '2' => $fechaHora,
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
+            '5' => $appointment->premise->name ?? '',
+            '6' => $appointment->maintenance_type ?? '',
+            '7' => $appointment->comments ?: 'Sin Comentarios',
+        ];
+    }
+
+    /* Construir variables para template de recordatorio */
+    protected function buildReminderVariables(Appointment $appointment, array $cliente, array $vehiculo): array
+    {
+        // Formatear fecha y hora
         $fechaFormateada = \Carbon\Carbon::parse($appointment->appointment_date)->format('d/m/Y');
         $horaFormateada = \Carbon\Carbon::parse($appointment->appointment_time)->format('H:i');
         $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
