@@ -9,6 +9,9 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * RICARDO - Mailable para enviar emails de recordatorio de citas.
+ */
 class RecordatorioCita extends Mailable
 {
     use Queueable, SerializesModels;

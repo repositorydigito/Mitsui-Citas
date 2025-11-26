@@ -27,3 +27,10 @@ Schedule::command('citas:enviar-recordatorios')
 
 // DESACTIVADO: Comando consume muchos recursos
 // Schedule::command('vehicles:update-tipo-valor-trabajo')->everyMinute();
+
+// RICARDO - Sistema de recordatorios 48h antes (Email + WhatsApp).
+Schedule::command('appointments:send-reminders')
+        ->dailyAt('09:00')
+        ->timezone('America/Lima')
+        ->withoutOverlapping()
+        ->runInBackground();
