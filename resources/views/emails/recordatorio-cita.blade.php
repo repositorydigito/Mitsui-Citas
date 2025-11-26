@@ -1,4 +1,7 @@
 <!DOCTYPE html>
+<!--
+    RICARDO - Template de email para recordatorios de citas 48h antes.
+-->
 <html lang="es">
 <head>
     <meta charset="UTF-8">

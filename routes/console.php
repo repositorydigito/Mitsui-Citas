@@ -28,9 +28,9 @@ Schedule::command('citas:enviar-recordatorios')
 // DESACTIVADO: Comando consume muchos recursos
 // Schedule::command('vehicles:update-tipo-valor-trabajo')->everyMinute();
 
-// Enviar recordatorios de citas programadas para mañana (24h antes) - PRUEBA a las 16:45
+// RICARDO - Sistema de recordatorios 48h antes (Email + WhatsApp).
 Schedule::command('appointments:send-reminders')
-        ->dailyAt('11:02')
+        ->dailyAt('00:00')
         ->timezone('America/Lima')
         ->withoutOverlapping()
         ->runInBackground();

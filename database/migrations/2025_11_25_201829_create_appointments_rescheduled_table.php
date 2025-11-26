@@ -8,6 +8,9 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * RICARDO - Tabla para registrar recordatorios de citas enviados (email + WhatsApp).
+     * Previene duplicados y permite tracking de envíos exitosos/fallidos.
      */
     public function up(): void
     {

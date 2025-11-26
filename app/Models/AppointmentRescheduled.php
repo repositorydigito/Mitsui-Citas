@@ -5,6 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * RICARDO - Modelo para tracking de recordatorios de citas.
+ * Registra el envío de emails y WhatsApp 48h antes de cada cita.
+ */
 class AppointmentRescheduled extends Model
 {
     protected $table = 'appointments_rescheduled';

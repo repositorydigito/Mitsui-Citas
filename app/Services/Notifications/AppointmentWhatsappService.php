@@ -6,6 +6,11 @@ use App\Models\Appointment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
+
+/**
+ * RICARDO - Servicio para enviar notificaciones WhatsApp de citas (Cita Creada, Reprogramada, Cancelada y Recordatorio).
+ */
+
 class AppointmentWhatsappService
 {
     /* Enviar notificación WhatsApp de cita CREADA */
@@ -35,7 +40,7 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'CANCELADA');
     }
 
-    /* Enviar notificación WhatsApp de RECORDATORIO de cita */
+    /** Enviar notificación WhatsApp de RECORDATORIO de cita */
     public function sendAppointmentReminder(Appointment $appointment, array $cliente, array $vehiculo): void
     {
         $contentSid = config('services.twilio.register_reminder');
@@ -162,7 +167,12 @@ class AppointmentWhatsappService
         ];
     }
 
-    /* maintenance_type + additionalServices */
+    /**
+     * Construir texto de servicios (maintenance_type + additionalServices)
+     *
+     * RICARDO - Método que combina tipo de mantenimiento con servicios adicionales.
+     * Usado en variable '6' de todos los templates de WhatsApp.
+     */
     protected function buildServicesText(Appointment $appointment): string
     {
         $services = [];

@@ -11,6 +11,10 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
+/**
+ * RICARDO - Comando para enviar recordatorios automáticos de citas.
+ * Busca citas 48h antes y envía email + WhatsApp a los clientes.
+ */
 class SendAppointmentRemindersCommand extends Command
 {
     /**
@@ -34,23 +38,23 @@ class SendAppointmentRemindersCommand extends Command
     {
         $this->info('🔔 Iniciando envío de recordatorios de citas...');
 
-        // Obtener fecha de PASADO MAÑANA (48h desde ahora)
+        // Obtener fecha (48h)
         $targetDate = Carbon::now()->addDays(2);
 
-        Log::info('📅 [Recordatorios] Buscando citas para pasado mañana (48h)', [
+        Log::info('📅 [Recordatorios] Buscando citas (48h)', [
             'target_date' => $targetDate->format('Y-m-d'),
         ]);
 
-        // Buscar citas para pasado mañana con status confirmado o pendiente
+        // Buscar citas con status confirmado o pendiente
         $appointments = Appointment::whereDate('appointment_date', $targetDate)
             ->whereIn('status', ['confirmed', 'pending'])
             ->with(['premise', 'vehicle'])
             ->get();
 
-        $this->info("📊 Encontradas {$appointments->count()} citas para pasado mañana");
+        $this->info("📊 Encontradas {$appointments->count()} citas");
 
         if ($appointments->isEmpty()) {
-            $this->info('✅ No hay citas programadas para pasado mañana (48h)');
+            $this->info('✅ No hay citas programadas');
             return Command::SUCCESS;
         }
 
@@ -135,7 +139,7 @@ class SendAppointmentRemindersCommand extends Command
                         'error_message' => $e->getMessage(),
                     ]);
                 } catch (\Exception $dbError) {
-                    // Si ni siquiera se puede guardar el error, solo loggear
+
                 }
 
                 Log::error('❌ [Recordatorios] Error enviando recordatorio', [
@@ -146,7 +150,7 @@ class SendAppointmentRemindersCommand extends Command
             }
         }
 
-        // Resumen
+        // Resumen en los Logs
         $this->newLine();
         $this->info('📊 Resumen de procesamiento:');
         $this->table(
