@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 
 class AppointmentWhatsappService
 {
-    /* Enviar notificación WhatsApp para cita CREADA */
+    /* Enviar notificación WhatsApp de cita CREADA */
     public function sendAppointmentCreated(Appointment $appointment, array $cliente, array $vehiculo): void
     {
         $contentSid = config('services.twilio.register_appointment');
@@ -17,7 +17,7 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'CREADA');
     }
 
-    /* Enviar notificación WhatsApp para cita REPROGRAMADA */
+    /* Enviar notificación WhatsApp de cita REPROGRAMADA */
     public function sendAppointmentRescheduled(Appointment $appointment, array $cliente, array $vehiculo, array $cambiosRealizados): void
     {
         $contentSid = config('services.twilio.register_rescheduled');
@@ -26,7 +26,7 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'REPROGRAMADA');
     }
 
-    /* Enviar notificación WhatsApp para cita CANCELADA */
+    /* Enviar notificación WhatsApp de cita CANCELADA */
     public function sendAppointmentCancelled(Appointment $appointment, array $cliente, array $vehiculo, string $motivoCancelacion): void
     {
         $contentSid = config('services.twilio.register_annulled');
@@ -44,7 +44,7 @@ class AppointmentWhatsappService
         $this->sendWhatsAppNotification($appointment, $contentSid, $variables, 'RECORDATORIO');
     }
 
-    /* Lógica común de envío a Twilio */
+    /* Lógica de envío a Twilio */
     protected function sendWhatsAppNotification(Appointment $appointment, string $contentSid, array $variables, string $templateType): void
     {
         $accountSid = config('services.twilio.account_sid');
@@ -90,7 +90,8 @@ class AppointmentWhatsappService
         ]);
     }
 
-    /* Construir variables para template de cita creada */
+
+    /* Template de cita creada */
     protected function buildContentVariables(Appointment $appointment, array $cliente, array $vehiculo): array
     {
         // Formatear fecha y hora
@@ -99,50 +100,50 @@ class AppointmentWhatsappService
         $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
 
         return [
-            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '1' => trim(($cliente['nombres'] ?: 'Sin Nombres') . ' ' . ($cliente['apellidos'] ?: 'Sin Apellidos')),
             '2' => $fechaHora,
-            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
-            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
-            '5' => $appointment->premise->name ?? '',
-            '6' => $appointment->maintenance_type ?? '',
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
+            '5' => $appointment->premise->name ?: 'Sin Sede',
+            '6' => $this->buildServicesText($appointment),
             '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
-    /* Construir variables para template de cita reprogramada */
+    /* Template de cita reprogramada */
     protected function buildRescheduledVariables(Appointment $appointment, array $cliente, array $vehiculo, array $cambiosRealizados): array
     {
         return [
-            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '1' => trim(($cliente['nombres'] ?: 'Sin Nombres') . ' ' . ($cliente['apellidos'] ?: 'Sin Apellidos')),
             '2' => $cambiosRealizados['Fecha']['nuevo'] . ' a las ' . $cambiosRealizados['Hora']['nuevo'],
-            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
-            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
-            '5' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?? '',
-            '6' => $appointment->maintenance_type ?? '',
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
+            '5' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?: 'Sin Sede',
+            '6' => $this->buildServicesText($appointment),
             '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
-    /* Construir variables para template de cita cancelada */
+    /* Template de cita cancelada */
     protected function buildCancelledVariables(Appointment $appointment, array $cliente, array $vehiculo, string $motivoCancelacion): array
     {
-        // Formatear fecha y hora con formato estándar: dd/mm/yyyy a las HH:mm
+        // Formatear fecha y hora
         $fechaFormateada = \Carbon\Carbon::parse($appointment->appointment_date)->format('d/m/Y');
         $horaFormateada = \Carbon\Carbon::parse($appointment->appointment_time)->format('H:i');
         $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
 
         return [
-            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '1' => trim(($cliente['nombres'] ?: 'Sin Nombres') . ' ' . ($cliente['apellidos'] ?: 'Sin Apellidos')),
             '2' => $fechaHora,
-            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
-            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
-            '5' => $appointment->premise->name ?? '',
-            '6' => $appointment->maintenance_type ?? '',
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
+            '5' => $appointment->premise->name ?: 'Sin Sede',
+            '6' => $this->buildServicesText($appointment),
             '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
-    /* Construir variables para template de recordatorio */
+    /* Template de recordatorio */
     protected function buildReminderVariables(Appointment $appointment, array $cliente, array $vehiculo): array
     {
         // Formatear fecha y hora
@@ -151,13 +152,40 @@ class AppointmentWhatsappService
         $fechaHora = "{$fechaFormateada} a las {$horaFormateada}";
 
         return [
-            '1' => trim(($cliente['nombres'] ?? '') . ' ' . ($cliente['apellidos'] ?? '')),
+            '1' => trim(($cliente['nombres'] ?: 'Sin Nombres') . ' ' . ($cliente['apellidos'] ?: 'Sin Apellidos')),
             '2' => $fechaHora,
-            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?? '',
-            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?? '',
-            '5' => $appointment->premise->name ?? '',
-            '6' => $appointment->maintenance_type ?? '',
+            '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
+            '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
+            '5' => $appointment->premise->name ?: 'Sin Sede',
+            '6' => $this->buildServicesText($appointment),
             '7' => $appointment->comments ?: 'Sin Comentarios',
         ];
+    }
+
+    /* maintenance_type + additionalServices */
+    protected function buildServicesText(Appointment $appointment): string
+    {
+        $services = [];
+
+        // Agregar maintenance_type
+        if ($appointment->maintenance_type) {
+            $services[] = $appointment->maintenance_type;
+        }
+
+        // Agregar servicios adicionales
+        if ($appointment->additionalServices && $appointment->additionalServices->count() > 0) {
+            $additionalNames = $appointment->additionalServices
+                ->map(function ($appointmentService) {
+                    return $appointmentService->additionalService->name ?? null;
+                })
+                ->filter()
+                ->toArray();
+
+            if (!empty($additionalNames)) {
+                $services = array_merge($services, $additionalNames);
+            }
+        }
+
+        return !empty($services) ? implode(', ', $services) : 'Sin servicios';
     }
 }
