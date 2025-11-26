@@ -30,7 +30,7 @@ Schedule::command('citas:enviar-recordatorios')
 
 // RICARDO - Sistema de recordatorios 48h antes (Email + WhatsApp).
 Schedule::command('appointments:send-reminders')
-        ->dailyAt('00:00')
+        ->dailyAt('09:00')
         ->timezone('America/Lima')
         ->withoutOverlapping()
         ->runInBackground();
