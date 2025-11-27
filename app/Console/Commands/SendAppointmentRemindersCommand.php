@@ -52,7 +52,7 @@ class SendAppointmentRemindersCommand extends Command
             'force_mode' => $force,
         ]);
 
-        // Buscar citas para mañana (appointment_date) con status confirmado o pendiente
+        // Buscar citas para mañana (appointment_date) con status confirmado o pendiente y $targetDate para comparar con la fecha de 1 dia antes
         $appointments = Appointment::whereDate('appointment_date', $targetDate)
             ->whereIn('status', ['confirmed', 'pending'])
             ->with(['premise', 'vehicle', 'additionalServices.additionalService'])
