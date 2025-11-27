@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Mail;
 
 /**
  * RICARDO - Comando para enviar recordatorios automáticos de citas.
- * Busca citas 48h antes y envía email + WhatsApp a los clientes.
+ * Busca citas para MAÑANA (24h antes) y envía email + WhatsApp a los clientes.
  */
 class SendAppointmentRemindersCommand extends Command
 {
@@ -22,39 +22,46 @@ class SendAppointmentRemindersCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'appointments:send-reminders';
+    protected $signature = 'appointments:send-reminders {--force : Forzar reenvío ignorando recordatorios existentes}';
 
     /**
      * The console command description.
      *
      * @var string
      */
-    protected $description = 'Enviar recordatorios de citas 48 horas antes';
+    protected $description = 'Enviar recordatorios de citas 24 horas antes (para mañana)';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
+        $force = $this->option('force');
+
         $this->info('🔔 Iniciando envío de recordatorios de citas...');
 
-        // Obtener fecha (48h)
-        $targetDate = Carbon::now()->addDays(2);
+        if ($force) {
+            $this->warn('⚡ Modo FORCE activado - Se ignorarán recordatorios existentes');
+        }
 
-        Log::info('📅 [Recordatorios] Buscando citas (48h)', [
+        // Obtener fecha para MAÑANA (24h antes)
+        $targetDate = Carbon::now()->addDay();
+
+        Log::info('📅 [Recordatorios] Buscando citas para mañana', [
             'target_date' => $targetDate->format('Y-m-d'),
+            'force_mode' => $force,
         ]);
 
-        // Buscar citas con status confirmado o pendiente
+        // Buscar citas para mañana (appointment_date) con status confirmado o pendiente
         $appointments = Appointment::whereDate('appointment_date', $targetDate)
             ->whereIn('status', ['confirmed', 'pending'])
-            ->with(['premise', 'vehicle'])
+            ->with(['premise', 'vehicle', 'additionalServices.additionalService'])
             ->get();
 
-        $this->info("📊 Encontradas {$appointments->count()} citas");
+        $this->info("📊 Encontradas {$appointments->count()} citas para mañana");
 
         if ($appointments->isEmpty()) {
-            $this->info('✅ No hay citas programadas');
+            $this->info('✅ No hay citas programadas para mañana');
             return Command::SUCCESS;
         }
 
@@ -64,15 +71,18 @@ class SendAppointmentRemindersCommand extends Command
 
         foreach ($appointments as $appointment) {
             try {
-                // Verificar si ya existe un recordatorio para esta cita
-                $existeRecordatorio = AppointmentRescheduled::where('appointment_id', $appointment->id)
-                    ->whereDate('reminder_date', $targetDate)
-                    ->exists();
 
-                if ($existeRecordatorio) {
-                    $recordatoriosExistentes++;
-                    $this->warn("⚠️  Recordatorio ya existe para cita #{$appointment->id}");
-                    continue;
+                // Verificar si ya existe un recordatorio para esta cita (solo si no es modo force)
+                if (!$force) {
+                    $existeRecordatorio = AppointmentRescheduled::where('appointment_id', $appointment->id)
+                        ->whereDate('reminder_date', $targetDate)
+                        ->exists();
+
+                    if ($existeRecordatorio) {
+                        $recordatoriosExistentes++;
+                        $this->warn("⚠️  Recordatorio ya existe para cita #{$appointment->id}");
+                        continue;
+                    }
                 }
 
                 // Preparar datos del cliente
