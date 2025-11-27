@@ -103,23 +103,23 @@
                 // Usar URL absoluta directamente
                 $logoUrl = url('images/logo_Mitsui_Blanco.png');
                 $style = "display: block; margin: 0 auto 15px; width: 200px; height: auto;";
-                
+
                 // Log para depuración
                 Log::info("URL de la imagen: " . $logoUrl);
             @endphp
-            
-            <img src="{{ $logoUrl }}" 
-                 alt="Mitsui Automotriz" 
+
+            <img src="{{ $logoUrl }}"
+                 alt="Mitsui Automotriz"
                  class="logo"
                  style="{{ $style }}"
                  onerror="console.error('Error al cargar la imagen:', this.src)">
         </div>
         <h2 style="margin: 0; font-size: 24px; line-height: 1.3;">
-            <span class="success-icon" style="color: #28a745; font-size: 24px; vertical-align: middle;">✅</span> 
+            <span class="success-icon" style="color: #28a745; font-size: 24px; vertical-align: middle;">✅</span>
             Cita Generada
         </h2>
     </div>
-    
+
     <div class="content">
         <p>Hola, <strong>{{ $datosCliente['nombres'] }} {{ $datosCliente['apellidos'] }}</strong>,</p>
         <p>Tu cita de servicio fue agendada</p>
@@ -132,7 +132,7 @@
                 {{ \Carbon\Carbon::parse($appointment->appointment_date)->format('d/m/Y') }} a las {{ \Carbon\Carbon::parse($appointment->appointment_time)->format('H:i') }}
             </div>
         </div>
-        
+
         <div class="info-section">
             <div class="info-label">🚗 Vehículo:</div>
             <div class="info-value">{{ $datosVehiculo['marca'] ?? '' }} {{ $datosVehiculo['modelo'] ?? '' }}</div>
@@ -143,40 +143,54 @@
 
             <div class="info-label">🔧 Servicio:</div>
             <div class="info-value">
-                @if($appointment->maintenance_type)
-                    Mantenimiento periódico
-                @elseif($appointment->service_mode)
-                    {{ str_replace('Campañas / otros', 'Otros Servicios', $appointment->service_mode) }}
-                @else
-                    Mantenimiento periódico
+                @php
+                    $serviceTypes = [];
+                    if($appointment->maintenance_type) {
+                        $serviceTypes[] = 'Mantenimiento periódico';
+                    }
+                    if($appointment->additionalServices && $appointment->additionalServices->count() > 0) {
+                        $serviceTypes[] = 'Otros Servicios';
+                    }
+                @endphp
+                {{ !empty($serviceTypes) ? implode(', ', $serviceTypes) : 'Servicio no encontrado' }}
+            </div>
+
+            @php
+                $hasMaintenanceType = !empty($appointment->maintenance_type);
+                $hasAdditionalServices = $appointment->additionalServices && $appointment->additionalServices->count() > 0;
+            @endphp
+
+            @if($hasMaintenanceType || $hasAdditionalServices)
+            <div class="info-label">⚙️ Mantenimiento:</div>
+            <div class="info-value">
+                @if($hasMaintenanceType)
+                    <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #0075BF;">
+                        <strong>{{ $appointment->maintenance_type }}</strong>
+                    </div>
+                @endif
+
+                @if($hasAdditionalServices)
+                    @foreach($appointment->additionalServices as $appointmentService)
+                        <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #0075BF;">
+                            <strong>{{ $appointmentService->additionalService->name ?? 'Servicio no encontrado' }}</strong>
+                            @if($appointmentService->additionalService && $appointmentService->additionalService->description)
+                                <div style="font-size: 11px; color: #888; margin-top: 2px; font-style: italic;">{{ $appointmentService->additionalService->description }}</div>
+                            @endif
+                        </div>
+                    @endforeach
                 @endif
             </div>
-            
-            @if($appointment->maintenance_type)
+            @else
             <div class="info-label">⚙️ Mantenimiento:</div>
-            <div class="info-value">{{ $appointment->maintenance_type }}</div>
+            <div class="info-value">Mantenimiento no encontrado</div>
             @endif
-            
-            @if($appointment->additionalServices && $appointment->additionalServices->count() > 0)
-            <div class="info-label">🔧 Servicios Adicionales:</div>
-            <div class="info-value">
-                @foreach($appointment->additionalServices as $appointmentService)
-                    <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #0075BF;">
-                        <strong>{{ $appointmentService->additionalService->name ?? 'Servicio no encontrado' }}</strong>
-                        @if($appointmentService->additionalService && $appointmentService->additionalService->description)
-                            <div style="font-size: 11px; color: #888; margin-top: 2px; font-style: italic;">{{ $appointmentService->additionalService->description }}</div>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
-            @endif
-            
+
             @if($appointment->comments)
             <div class="info-label">💬 Comentarios:</div>
             <div class="info-value">{{ $appointment->comments }}</div>
             @endif
         </div>
-        
+
         <div class="info-section">
             <div class="info-label">📞 Datos de Contacto:</div>
             <div class="info-value">
@@ -184,7 +198,7 @@
                 <strong>Email:</strong> {{ $datosCliente['email'] }}
             </div>
         </div>
-        
+
         <div class="highlight">
             <p><strong>📋 Importante:</strong></p>
             <ul>
@@ -196,19 +210,19 @@
             </ul>
             <p>"Recuerde que, según el Decreto Legislativo 1529, las operaciones a partir de S/2,000 o US$ 500 se deberán realizar a través de un medio de pago dentro del sistema financiero, como transferencias bancarias o tarjetas (no aceptamos cheques)."</p>
         </div>
-        
+
         @php
             // Usar la versión PNG del logo para mejor compatibilidad
             $logoFooterUrl = asset('images/logomitsuifooter.png');
             $logoFooterUrl = str_replace('http://', 'https://', $logoFooterUrl);
             $logoFooterStyle = "display: block; margin: 20px auto; width: 6rem; height: auto; max-width: 100%;";
         @endphp
-        <img src="{{ $logoFooterUrl }}" 
-             alt="Mitsui Automotriz" 
+        <img src="{{ $logoFooterUrl }}"
+             alt="Mitsui Automotriz"
              style="{{ $logoFooterStyle }}">
 
     </div>
-    
+
     <div class="footer">
         <p>Este es un correo automático. Por favor, no responda. Si tiene cualquier duda o sugerencia puede escribirnos a usuario@mitsuiautomotriz.com</p>
         <p>Por motivos de seguridad, las claves son secretas y únicamente deben ser conocidas por el propietario. En ningún caso, Mitsui Automotriz le solicitará información sobre su contraseña, códigos o datos de sus tarjetas afiliadas. Se recomienda comprobar siempre la dirección que aparece en la barra de navegación.</p>

@@ -149,32 +149,46 @@
 
             <div class="info-label">🔧 Servicio:</div>
             <div class="info-value">
-                @if($appointment->maintenance_type)
-                    Mantenimiento periódico
-                @elseif($appointment->service_mode)
-                    {{ str_replace('Campañas / otros', 'Otros Servicios', $appointment->service_mode) }}
-                @else
-                    Mantenimiento periódico
+                @php
+                    $serviceTypes = [];
+                    if($appointment->maintenance_type) {
+                        $serviceTypes[] = 'Mantenimiento periódico';
+                    }
+                    if($appointment->additionalServices && $appointment->additionalServices->count() > 0) {
+                        $serviceTypes[] = 'Otros Servicios';
+                    }
+                @endphp
+                {{ !empty($serviceTypes) ? implode(', ', $serviceTypes) : 'Servicio no encontrado' }}
+            </div>
+
+            @php
+                $hasMaintenanceType = !empty($appointment->maintenance_type);
+                $hasAdditionalServices = $appointment->additionalServices && $appointment->additionalServices->count() > 0;
+            @endphp
+
+            @if($hasMaintenanceType || $hasAdditionalServices)
+            <div class="info-label">⚙️ Tipo de Mantenimiento:</div>
+            <div class="info-value">
+                @if($hasMaintenanceType)
+                    <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #17a2b8;">
+                        <strong>{{ $appointment->maintenance_type }}</strong>
+                    </div>
+                @endif
+
+                @if($hasAdditionalServices)
+                    @foreach($appointment->additionalServices as $appointmentService)
+                        <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #17a2b8;">
+                            <strong>{{ $appointmentService->additionalService->name ?? 'Servicio no encontrado' }}</strong>
+                            @if($appointmentService->additionalService && $appointmentService->additionalService->description)
+                                <div style="font-size: 11px; color: #888; margin-top: 2px; font-style: italic;">{{ $appointmentService->additionalService->description }}</div>
+                            @endif
+                        </div>
+                    @endforeach
                 @endif
             </div>
-
-            @if($appointment->maintenance_type)
+            @else
             <div class="info-label">⚙️ Tipo de Mantenimiento:</div>
-            <div class="info-value">{{ $appointment->maintenance_type }}</div>
-            @endif
-
-            @if($appointment->additionalServices && $appointment->additionalServices->count() > 0)
-            <div class="info-label">🔧 Servicios Adicionales:</div>
-            <div class="info-value">
-                @foreach($appointment->additionalServices as $appointmentService)
-                    <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #17a2b8;">
-                        <strong>{{ $appointmentService->additionalService->name ?? 'Servicio no encontrado' }}</strong>
-                        @if($appointmentService->additionalService && $appointmentService->additionalService->description)
-                            <div style="font-size: 11px; color: #888; margin-top: 2px; font-style: italic;">{{ $appointmentService->additionalService->description }}</div>
-                        @endif
-                    </div>
-                @endforeach
-            </div>
+            <div class="info-value">Mantenimiento no encontrado</div>
             @endif
 
             @if($appointment->comments)
