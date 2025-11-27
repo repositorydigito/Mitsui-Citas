@@ -110,8 +110,9 @@ class AppointmentWhatsappService
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
             '5' => $appointment->premise->name ?: 'Sin Sede',
-            '6' => $this->buildServicesText($appointment),
-            '7' => $appointment->comments ?: 'Sin Comentarios',
+            '6' => $this->buildServiceTypes($appointment),
+            '7' => $this->buildMaintenanceDetails($appointment),
+            '8' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
@@ -124,8 +125,9 @@ class AppointmentWhatsappService
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
             '5' => $cambiosRealizados['Sede']['nuevo'] ?? $appointment->premise->name ?: 'Sin Sede',
-            '6' => $this->buildServicesText($appointment),
-            '7' => $appointment->comments ?: 'Sin Comentarios',
+            '6' => $this->buildServiceTypes($appointment),
+            '7' => $this->buildMaintenanceDetails($appointment),
+            '8' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
@@ -143,8 +145,9 @@ class AppointmentWhatsappService
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
             '5' => $appointment->premise->name ?: 'Sin Sede',
-            '6' => $this->buildServicesText($appointment),
-            '7' => $appointment->comments ?: 'Sin Comentarios',
+            '6' => $this->buildServiceTypes($appointment),
+            '7' => $this->buildMaintenanceDetails($appointment),
+            '8' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
@@ -162,24 +165,49 @@ class AppointmentWhatsappService
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
             '5' => $appointment->premise->name ?: 'Sin Sede',
-            '6' => $this->buildServicesText($appointment),
-            '7' => $appointment->comments ?: 'Sin Comentarios',
+            '6' => $appointment->maintenance_type ?: 'Sin Servicio',
+            '7' => $this->buildServicesText($appointment) ?: 'Sin Mantenimiento',
+            '8' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
 
     /**
-     * Construir texto de servicios (maintenance_type + additionalServices)
+     * Construir TIPOS de servicio (Variable 6)
      *
-     * RICARDO - Método que combina tipo de mantenimiento con servicios adicionales.
-     * Usado en variable '6' de todos los templates de WhatsApp.
+     * RICARDO - Devuelve los tipos genéricos de servicio:
+     * - "Mantenimiento periódico" si hay maintenance_type
+     * - "Otros Servicios" si hay additionalServices
+     * - "Mantenimiento periódico, Otros Servicios" si hay ambos
      */
-    protected function buildServicesText(Appointment $appointment): string
+    protected function buildServiceTypes(Appointment $appointment): string
     {
-        $services = [];
+        $serviceTypes = [];
+
+        if ($appointment->maintenance_type) {
+            $serviceTypes[] = 'Mantenimiento periódico';
+        }
+
+        if ($appointment->additionalServices && $appointment->additionalServices->count() > 0) {
+            $serviceTypes[] = 'Otros Servicios';
+        }
+
+        return !empty($serviceTypes) ? implode(', ', $serviceTypes) : 'Servicio no encontrado';
+    }
+
+    /**
+     * Construir DETALLES de mantenimiento (Variable 7)
+     *
+     * RICARDO - Devuelve la lista detallada de mantenimientos:
+     * - maintenance_type (ej: "10,000 km")
+     * - additionalServices (ej: "Alineado, Balanceo")
+     */
+    protected function buildMaintenanceDetails(Appointment $appointment): string
+    {
+        $maintenanceList = [];
 
         // Agregar maintenance_type
         if ($appointment->maintenance_type) {
-            $services[] = $appointment->maintenance_type;
+            $maintenanceList[] = $appointment->maintenance_type;
         }
 
         // Agregar servicios adicionales
@@ -192,10 +220,11 @@ class AppointmentWhatsappService
                 ->toArray();
 
             if (!empty($additionalNames)) {
-                $services = array_merge($services, $additionalNames);
+                $maintenanceList = array_merge($maintenanceList, $additionalNames);
             }
         }
 
-        return !empty($services) ? implode(', ', $services) : 'Sin servicios';
+        return !empty($maintenanceList) ? implode(', ', $maintenanceList) : 'Mantenimiento no encontrado';
     }
+
 }
