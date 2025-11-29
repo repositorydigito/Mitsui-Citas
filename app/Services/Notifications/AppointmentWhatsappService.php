@@ -165,8 +165,8 @@ class AppointmentWhatsappService
             '3' => $vehiculo['modelo'] ?? $appointment->vehicle->model ?: 'Sin Modelo',
             '4' => $vehiculo['placa'] ?? $appointment->vehicle_plate ?: 'Sin Placa',
             '5' => $appointment->premise->name ?: 'Sin Sede',
-            '6' => $appointment->maintenance_type ?: 'Sin Servicio',
-            '7' => $this->buildServicesText($appointment) ?: 'Sin Mantenimiento',
+            '6' => $this->buildServiceTypes($appointment),
+            '7' => $this->buildMaintenanceDetails($appointment),
             '8' => $appointment->comments ?: 'Sin Comentarios',
         ];
     }
