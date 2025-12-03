@@ -654,13 +654,20 @@ class AgendarCita extends Page
 
                 // Asignar email y teléfono
                 $this->emailCliente = $user->email ?? '';
-                $this->celularCliente = $user->phone ?? '';
+
+                // ✅ NUEVA SANITIZACIÓN: Limpiar teléfono cargado del usuario
+                $rawPhone = $user->phone ?? '';
+                $sanitized = substr(preg_replace('/[^0-9]/', '', $rawPhone), 0, 9);
+                $this->celularCliente = $sanitized;
 
                 Log::info('[AgendarCita] Datos del cliente cargados automáticamente:', [
                     'nombre' => $this->nombreCliente,
                     'apellido' => $this->apellidoCliente,
                     'email' => $this->emailCliente,
                     'celular' => $this->celularCliente,
+                    'telefono_original' => $rawPhone,
+                    'telefono_sanitizado' => $sanitized,
+                    'es_valido' => strlen($this->celularCliente) === 9,
                     'user_id' => $user->id,
                     'document_type' => $user->document_type,
                     'document_number' => $user->document_number,
@@ -2409,6 +2416,36 @@ class AgendarCita extends Page
                 'brand_code' => $vehicle->brand_code
             ]);
 
+            // ✅ NUEVA VALIDACIÓN: Validar teléfono antes de crear cita
+            [$isValidPhone, $sanitizedPhone, $phoneMessage] =
+                $this->validarYSanitizarTelefono($this->celularCliente);
+
+            if (!$isValidPhone) {
+                Log::warning('⚠️ [AgendarCita::guardarCita] Teléfono inválido detectado', [
+                    'telefono_original' => $this->celularCliente,
+                    'telefono_sanitizado' => $sanitizedPhone,
+                    'mensaje' => $phoneMessage
+                ]);
+
+                \Filament\Notifications\Notification::make()
+                    ->title('Error al Agendar Cita')
+                    ->body("Teléfono inválido. $phoneMessage. Por favor, completa tu número de celular.")
+                    ->danger()
+                    ->send();
+
+                // Forzar edición de datos para que corrija el teléfono
+                $this->editandoDatos = true;
+                $this->celularCliente = $sanitizedPhone;
+                return;
+            }
+
+            // Usar teléfono sanitizado (defensa en profundidad)
+            $this->celularCliente = $sanitizedPhone;
+
+            Log::info('✅ Teléfono validado correctamente', [
+                'telefono' => $this->celularCliente
+            ]);
+
             // **PASO 1: CREAR APPOINTMENT EN BD PRIMERO** 💾
             $appointment = new Appointment;
             $appointment->appointment_number = 'CITA-' . date('Ymd') . '-' . strtoupper(Str::random(5));
@@ -2418,7 +2455,7 @@ class AgendarCita extends Page
             $appointment->customer_name = $this->nombreCliente;
             $appointment->customer_last_name = $this->apellidoCliente;
             $appointment->customer_email = $this->emailCliente;
-            $appointment->customer_phone = $this->celularCliente;
+            $appointment->customer_phone = $this->celularCliente; // ✅ Ya validado y sanitizado arriba
             $appointment->appointment_date = $fechaFormateada;
             $appointment->appointment_time = $horaFormateada;
 
@@ -5200,46 +5237,84 @@ class AgendarCita extends Page
     }
 
     /**
+     * ✅ NUEVO: Sanitiza y valida el teléfono
+     * Retorna [bool $isValid, string $sanitized, string $message]
+     */
+    protected function validarYSanitizarTelefono(?string $telefono): array
+    {
+        $sanitized = substr(preg_replace('/[^0-9]/', '', $telefono ?? ''), 0, 9);
+        $length = strlen($sanitized);
+
+        $isValid = $length === 9;
+        $message = $isValid
+            ? "Teléfono válido ($length/9 dígitos)"
+            : "Faltan " . (9 - $length) . " dígitos ($length/9)";
+
+        return [$isValid, $sanitized, $message];
+    }
+
+    /**
      * Guarda los datos del cliente editados
      */
     public function guardarDatosCliente(): void
     {
-            $this->validate([
-                'nombreCliente' => 'required|string|max:255',
-                'apellidoCliente' => 'required|string|max:255',
-                'emailCliente' => 'required|email|max:255',
-                'celularCliente' => ['required', 'digits:9'],
-            ], [
-                'nombreCliente.required' => 'El nombre es obligatorio',
-                'apellidoCliente.required' => 'El apellido es obligatorio',
-                'emailCliente.required' => 'El email es obligatorio',
-                'emailCliente.email' => 'El email debe tener un formato válido',
-                'celularCliente.required' => 'El celular debe tener exactamente 9 números',
-            ]);
+        // ✅ NUEVA VALIDACIÓN: Sanitizar y validar teléfono antes de procesar
+        [$isValidPhone, $sanitizedPhone, $phoneMessage] =
+            $this->validarYSanitizarTelefono($this->celularCliente);
 
-            $user = Auth::user();
-
-            if ($user) {
-                $user->update([
-                    'name' => trim($this->nombreCliente . ' ' . $this->apellidoCliente),
-                    'email' => $this->emailCliente,
-                    'phone' => $this->celularCliente,
-                ]);
-
-                \Filament\Notifications\Notification::make()
-                    ->title('Datos actualizados')
-                    ->body('Tus datos han sido actualizados correctamente.')
-                    ->success()
-                    ->send();
-            }
-
-            $this->editandoDatos = false;
-
+        if (!$isValidPhone) {
             \Filament\Notifications\Notification::make()
-                ->title('Error al actualizar')
-                ->body('Hubo un error al actualizar tus datos. Por favor, inténtalo de nuevo.')
-                ->danger()
+                ->title('Teléfono inválido')
+                ->body("El teléfono debe tener exactamente 9 dígitos. $phoneMessage")
+                ->warning()
                 ->send();
 
+            // Limpiar el campo si contiene basura
+            $this->celularCliente = $sanitizedPhone;
+            return;
+        }
+
+        // Aplicar sanitización (redundante pero seguro)
+        $this->celularCliente = $sanitizedPhone;
+
+        // Validar resto de campos
+        $this->validate([
+            'nombreCliente' => 'required|string|max:255',
+            'apellidoCliente' => 'required|string|max:255',
+            'emailCliente' => 'required|email|max:255',
+            'celularCliente' => 'required|digits:9',
+        ], [
+            'nombreCliente.required' => 'El nombre es obligatorio',
+            'apellidoCliente.required' => 'El apellido es obligatorio',
+            'emailCliente.required' => 'El email es obligatorio',
+            'emailCliente.email' => 'El email debe tener un formato válido',
+            'celularCliente.required' => 'El celular es obligatorio',
+            'celularCliente.digits' => 'El celular debe tener exactamente 9 dígitos',
+        ]);
+
+        $user = Auth::user();
+
+        if ($user) {
+            $user->update([
+                'name' => trim($this->nombreCliente . ' ' . $this->apellidoCliente),
+                'email' => $this->emailCliente,
+                'phone' => $this->celularCliente,
+            ]);
+
+            \Filament\Notifications\Notification::make()
+                ->title('Datos actualizados')
+                ->body('Tus datos han sido actualizados correctamente.')
+                ->success()
+                ->send();
+
+            $this->editandoDatos = false;
+            return;
+        }
+
+        \Filament\Notifications\Notification::make()
+            ->title('Error al actualizar')
+            ->body('Hubo un error al actualizar tus datos. Por favor, inténtalo de nuevo.')
+            ->danger()
+            ->send();
     }
 }

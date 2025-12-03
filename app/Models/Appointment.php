@@ -78,6 +78,27 @@ class Appointment extends Model
     ];
 
     /**
+     * Mutator: Sanitiza el teléfono al asignarlo
+     * Asegura que solo contenga dígitos y máximo 9 caracteres
+     */
+    public function setCustomerPhoneAttribute($value)
+    {
+        // Limpiar: solo dígitos, máximo 9
+        $sanitized = substr(preg_replace('/[^0-9]/', '', $value ?? ''), 0, 9);
+        $this->attributes['customer_phone'] = $sanitized;
+    }
+
+    /**
+     * Validar que el teléfono sea exactamente 9 dígitos
+     * Útil para controles adicionales
+     */
+    public function isValidPhone(): bool
+    {
+        return strlen($this->customer_phone ?? '') === 9
+            && ctype_digit($this->customer_phone);
+    }
+
+    /**
      * The "booted" method of the model.
      */
     protected static function booted()
@@ -86,6 +107,22 @@ class Appointment extends Model
             // Generar número de cita único si no se ha proporcionado
             if (empty($appointment->appointment_number)) {
                 $appointment->appointment_number = 'CITA-'.date('Ymd').'-'.strtoupper(Str::random(5));
+            }
+        });
+
+        // ✅ Validación automática antes de guardar
+        static::saving(function ($appointment) {
+            // Validar teléfono solo si no está vacío
+            if (!empty($appointment->customer_phone) && !$appointment->isValidPhone()) {
+                \Illuminate\Support\Facades\Log::error('[Appointment] Intento de guardar con teléfono inválido', [
+                    'customer_phone' => $appointment->customer_phone,
+                    'appointment_id' => $appointment->id ?? 'nuevo',
+                    'user_id' => auth()->id(),
+                ]);
+
+                throw new \InvalidArgumentException(
+                    "El teléfono debe tener exactamente 9 dígitos. Recibido: '{$appointment->customer_phone}'"
+                );
             }
         });
     }
