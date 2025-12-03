@@ -1821,20 +1821,26 @@ class AgendarCita extends Page
                 });
             }
 
-            // ✅ FIX Ricardo: Filtrar por fecha de cita seleccionada
-            if (! empty($this->fechaSeleccionada)) {
-                // Convertir fecha del formato 'd/m/Y' a 'Y-m-d' para la comparación con la BD
+            // ✅ FIX Ricardo: Filtrar por mes/año del calendario visible
+            if (! empty($this->mesActual) && ! empty($this->anoActual)) {
+                // Convertir mes/año a rango de fechas del mes completo
                 try {
-                    $fechaCita = Carbon::createFromFormat('d/m/Y', $this->fechaSeleccionada)->format('Y-m-d');
-                    Log::info("[AgendarCita] Filtrando campañas por fecha de cita: {$fechaCita}");
+                    $primerDia = Carbon::createFromDate($this->anoActual, $this->mesActual, 1)->startOfDay();
+                    $ultimoDia = Carbon::createFromDate($this->anoActual, $this->mesActual, 1)->endOfMonth()->endOfDay();
 
-                    $query->where(function ($q) use ($fechaCita) {
-                        // Incluir campañas donde la fecha de la cita esté dentro del rango [start_date, end_date]
-                        $q->where(function ($subQ) use ($fechaCita) {
+                    $primerDiaStr = $primerDia->format('Y-m-d');
+                    $ultimoDiaStr = $ultimoDia->format('Y-m-d');
+
+                    Log::info("[AgendarCita] Filtrando campañas por mes/año: {$this->mesActual}/{$this->anoActual} (rango: {$primerDiaStr} - {$ultimoDiaStr})");
+
+                    $query->where(function ($q) use ($primerDiaStr, $ultimoDiaStr) {
+                        // Incluir campañas que estén activas en algún momento del mes visible
+                        $q->where(function ($subQ) use ($primerDiaStr, $ultimoDiaStr) {
                             $subQ->whereNotNull('start_date')
                                 ->whereNotNull('end_date')
-                                ->whereDate('start_date', '<=', $fechaCita)
-                                ->whereDate('end_date', '>=', $fechaCita);
+                                // La campaña está activa si: start_date <= último_día_mes AND end_date >= primer_día_mes
+                                ->whereDate('start_date', '<=', $ultimoDiaStr)
+                                ->whereDate('end_date', '>=', $primerDiaStr);
                         })
                         // O incluir campañas sin fechas definidas (campañas permanentes)
                         ->orWhere(function ($subQ) {
@@ -1843,12 +1849,12 @@ class AgendarCita extends Page
                         });
                     });
 
-                    Log::info("[AgendarCita] Filtro de fecha aplicado correctamente");
+                    Log::info("[AgendarCita] Filtro de mes/año aplicado correctamente");
                 } catch (\Exception $e) {
-                    Log::error("[AgendarCita] Error al parsear fecha para filtro de campañas: {$e->getMessage()}");
+                    Log::error("[AgendarCita] Error al filtrar campañas por mes/año: {$e->getMessage()}");
                 }
             } else {
-                Log::info("[AgendarCita] No hay fecha seleccionada, mostrando todas las campañas disponibles");
+                Log::info("[AgendarCita] No hay mes/año definido, mostrando todas las campañas disponibles");
             }
 
             $campanas = $query->get();
@@ -3896,6 +3902,10 @@ class AgendarCita extends Page
 
         // Regenerar el calendario
         $this->generarCalendario();
+
+        // ✅ FIX Ricardo: Recargar campañas filtrando por el nuevo mes/año
+        $this->cargarCampanas();
+        Log::info("[AgendarCita] Campañas recargadas para mes {$this->mesActual}/{$this->anoActual}: " . count($this->campanasDisponibles) . " campañas disponibles");
     }
 
     /**
@@ -3908,6 +3918,10 @@ class AgendarCita extends Page
 
         // Regenerar el calendario
         $this->generarCalendario();
+
+        // ✅ FIX Ricardo: Recargar campañas filtrando por el nuevo año
+        $this->cargarCampanas();
+        Log::info("[AgendarCita] Campañas recargadas para año {$this->anoActual}: " . count($this->campanasDisponibles) . " campañas disponibles");
     }
 
     /**
@@ -3955,9 +3969,8 @@ class AgendarCita extends Page
             // Cargar los horarios disponibles para esta fecha
             $this->cargarHorariosDisponibles();
 
-            // ✅ FIX Ricardo: Recargar campañas filtrando por la fecha seleccionada
-            $this->cargarCampanas();
-            Log::info("[AgendarCita] Campañas recargadas para fecha {$fecha}: " . count($this->campanasDisponibles) . " campañas disponibles");
+            // Nota: Las campañas ahora se filtran por mes/año del calendario, no por fecha específica
+            // La recarga se realiza en cambiarMes() y cambiarAno()
 
         } catch (\Exception $e) {
             Log::error('[AgendarCita] Error al seleccionar fecha: ' . $e->getMessage());
