@@ -1814,7 +1814,7 @@ class AgendarCita extends Page
                 });
             }
 
-            // ✅ NUEVO: Filtrar por fecha de cita seleccionada
+            // ✅ FIX Ricardo: Filtrar por fecha de cita seleccionada
             if (! empty($this->fechaSeleccionada)) {
                 // Convertir fecha del formato 'd/m/Y' a 'Y-m-d' para la comparación con la BD
                 try {
@@ -3918,7 +3918,7 @@ class AgendarCita extends Page
             // Cargar los horarios disponibles para esta fecha
             $this->cargarHorariosDisponibles();
 
-            // ✅ NUEVO: Recargar campañas filtrando por la fecha seleccionada
+            // ✅ FIX Ricardo: Recargar campañas filtrando por la fecha seleccionada
             $this->cargarCampanas();
             Log::info("[AgendarCita] Campañas recargadas para fecha {$fecha}: " . count($this->campanasDisponibles) . " campañas disponibles");
 
