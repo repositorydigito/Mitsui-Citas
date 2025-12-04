@@ -146,9 +146,25 @@
             <div class="info-value">
                 @php
                     $serviceTypes = [];
+
+                    // Verificar si hay mantenimiento o campaña
                     if($appointment->maintenance_type) {
-                        $serviceTypes[] = 'Mantenimiento periódico';
+                        // Detectar si es mantenimiento: debe contener "Km" o patrón de números con "000"
+                        $maintenanceType = $appointment->maintenance_type;
+                        $isMaintenance = (
+                            stripos($maintenanceType, ' km') !== false ||
+                            stripos($maintenanceType, ' Km') !== false ||
+                            preg_match('/\d{1,3}[,.]?\d{3}\s*(km|Km)/i', $maintenanceType)
+                        );
+
+                        if($isMaintenance) {
+                            $serviceTypes[] = 'Mantenimiento periódico';
+                        } else {
+                            // Si no es mantenimiento, es una campaña
+                            $serviceTypes[] = 'Campañas';
+                        }
                     }
+
                     if($appointment->additionalServices && $appointment->additionalServices->count() > 0) {
                         $serviceTypes[] = 'Otros Servicios';
                     }

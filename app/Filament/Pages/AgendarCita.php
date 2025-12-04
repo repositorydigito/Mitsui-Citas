@@ -2510,7 +2510,16 @@ class AgendarCita extends Page
                 $serviceModes[] = 'express';
             }
             $appointment->service_mode = implode(', ', $serviceModes);
-            $appointment->maintenance_type = $this->tipoMantenimiento;
+
+            // Determinar maintenance_type: puede ser tipo de mantenimiento o título de campaña
+            $maintenanceType = $this->tipoMantenimiento;
+            if (empty($maintenanceType) && !empty($this->campanaSeleccionada)) {
+                $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
+                if ($campana) {
+                    $maintenanceType = $campana['titulo'];
+                }
+            }
+            $appointment->maintenance_type = $maintenanceType;
             $appointment->comments = $this->comentarios;
 
             // ✅ GUARDAR SELECCIONES EN CAMPO JSON:
@@ -4326,8 +4335,36 @@ class AgendarCita extends Page
             $appointment->premise_id = $this->locales[$this->localSeleccionado]['id'];
             $appointment->appointment_date = Carbon::createFromFormat('d/m/Y', $this->fechaSeleccionada);
             $appointment->appointment_time = $this->horaSeleccionada;
-            $appointment->maintenance_type = $this->tipoMantenimiento;
+
+            // Determinar maintenance_type: puede ser tipo de mantenimiento o título de campaña
+            $maintenanceType = $this->tipoMantenimiento;
+
+            Log::info('🔍 [AgendarCita] Determinando maintenance_type', [
+                'tipoMantenimiento' => $this->tipoMantenimiento,
+                'campanaSeleccionada' => $this->campanaSeleccionada,
+                'campanasDisponibles_count' => count($this->campanasDisponibles ?? [])
+            ]);
+
+            if (empty($maintenanceType) && !empty($this->campanaSeleccionada)) {
+                $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
+                Log::info('🔍 [AgendarCita] Buscando campaña', [
+                    'campana_encontrada' => $campana ? 'SI' : 'NO',
+                    'campana_data' => $campana
+                ]);
+                if ($campana) {
+                    $maintenanceType = $campana['titulo'];
+                    Log::info('✅ [AgendarCita] Campaña asignada a maintenance_type', [
+                        'titulo' => $maintenanceType
+                    ]);
+                }
+            }
+
+            $appointment->maintenance_type = $maintenanceType;
             $appointment->status = 'pending';
+
+            Log::info('💾 [AgendarCita] maintenance_type final antes de guardar', [
+                'maintenance_type' => $appointment->maintenance_type
+            ]);
 
             // NUEVOS CAMPOS PARA INTEGRACIÓN COMPLETA
             // ✅ DETECTAR CLIENTE COMODÍN ANTES DE ASIGNAR PACKAGE_ID
@@ -4939,7 +4976,16 @@ class AgendarCita extends Page
             $serviceModes[] = 'express';
         }
         $appointment->service_mode = implode(', ', $serviceModes);
-        $appointment->maintenance_type = $this->tipoMantenimiento;
+
+        // Determinar maintenance_type: puede ser tipo de mantenimiento o título de campaña
+        $maintenanceType = $this->tipoMantenimiento;
+        if (empty($maintenanceType) && !empty($this->campanaSeleccionada)) {
+            $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
+            if ($campana) {
+                $maintenanceType = $campana['titulo'];
+            }
+        }
+        $appointment->maintenance_type = $maintenanceType;
         $appointment->comments = $this->comentarios;
         $appointment->status = 'pending'; // Pendiente hasta que C4C confirme
         $appointment->is_synced = false;
