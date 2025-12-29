@@ -238,6 +238,10 @@ class DashboardKpi extends Page
                          ->where('rescheduled', 0);
                   });
             })
+            ->where(function($q) {
+                $q->whereNull('comments')
+                  ->orWhere('comments', 'NOT LIKE', '%prueba%');
+            })
             ->count();
 
         $this->citasEnTrabajo = (clone $query)
@@ -262,6 +266,7 @@ class DashboardKpi extends Page
             ? round(($this->citasEnTrabajo / $this->citasGeneradas) * 100) 
             : 0;
 
+        // Citas con mantenimiento (de las citas generadas)
         $citasConMantenimiento = (clone $query)
             ->where(function($q) {
                 $q->where('status', 'confirmed')
@@ -269,6 +274,10 @@ class DashboardKpi extends Page
                       $q2->where('status', 'cancelled')
                          ->where('rescheduled', 0);
                   });
+            })
+            ->where(function($q) {
+                $q->whereNull('comments')
+                  ->orWhere('comments', 'NOT LIKE', '%prueba%');
             })
             ->whereNotNull('maintenance_type')
             ->where('maintenance_type', '!=', '')
@@ -281,7 +290,24 @@ class DashboardKpi extends Page
 
         $this->citasDiferidas = (clone $query)->where('rescheduled', 1)->count();
 
-        $citasSinMantenimiento = (clone $query)->whereNotNull('wildcard_selections')
+        // Citas sin mantenimiento (de las citas generadas)
+        $citasSinMantenimiento = (clone $query)
+            ->where(function($q) {
+                $q->where('status', 'confirmed')
+                  ->orWhere(function($q2) {
+                      $q2->where('status', 'cancelled')
+                         ->where('rescheduled', 0);
+                  });
+            })
+            ->where(function($q) {
+                $q->whereNull('comments')
+                  ->orWhere('comments', 'NOT LIKE', '%prueba%');
+            })
+            ->where(function($q) {
+                $q->whereNull('maintenance_type')
+                  ->orWhere('maintenance_type', '');
+            })
+            ->whereNotNull('wildcard_selections')
             ->where('wildcard_selections', '!=', 'null')
             ->where('wildcard_selections', '!=', '')
             ->count();

@@ -426,13 +426,14 @@ class Appointment extends Model
     {
         return $query->where('no_show', true)
             ->orWhere(function($q) {
-                // Citas que tienen 'cita_confirmada' pero no 'en_trabajo' activo/completado y han pasado más de 10 horas
+                // Citas confirmadas que NO pasaron a trabajo después de 10 horas
                 $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp') IS NOT NULL")
                   ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') IS NULL")
                   ->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') IS NULL")
                   ->whereRaw("TIMESTAMPDIFF(HOUR, STR_TO_DATE(JSON_UNQUOTE(JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp')), '%Y-%m-%d %H:%i:%s'), NOW()) > 10");
-            })->orWhere(function($q) {
-                // O citas que tienen ambos estados pero pasaron más de 10 horas entre ellos
+            })
+            ->orWhere(function($q) {
+                // Citas que SÍ pasaron a trabajo pero DESPUÉS de las 10 horas (llegaron muy tarde)
                 $q->whereRaw("JSON_EXTRACT(frontend_states, '$.cita_confirmada.timestamp') IS NOT NULL")
                   ->where(function($q2) {
                       $q2->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = true")
