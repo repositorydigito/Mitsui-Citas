@@ -162,7 +162,7 @@
             @endphp
 
             @if($hasMaintenanceType || $hasAdditionalServices)
-            <div class="info-label">⚙️ Mantenimiento:</div>
+            <div class="info-label">⚙️ Detalle:</div>
             <div class="info-value">
                 @if($hasMaintenanceType)
                     <div style="margin-bottom: 8px; padding: 8px; background-color: #f8f9fa; border-radius: 4px; border-left: 3px solid #0075BF;">
@@ -182,8 +182,8 @@
                 @endif
             </div>
             @else
-            <div class="info-label">⚙️ Mantenimiento:</div>
-            <div class="info-value">Mantenimiento no encontrado</div>
+            <div class="info-label">⚙️ Detalle:</div>
+            <div class="info-value">Detalle no encontrado</div>
             @endif
 
             @if($appointment->comments)
