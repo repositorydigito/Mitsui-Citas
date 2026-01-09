@@ -41,11 +41,12 @@
         </style>
         <script src="https://cdn.tailwindcss.com"></script>
         @livewireStyles
-    </head>
 
-    <link rel="manifest" href="{{ asset('manifest.json') }}">
-    <link rel="apple-touch-icon" href="{{ asset('images/LOGOTEMA1.png') }}">
-    <meta name="theme-color" content="#ffffff">
+        <link rel="manifest" href="{{ asset('manifest.json') }}">
+        <link rel="apple-touch-icon" href="{{ asset('images/LOGOTEMA1.png') }}">
+        <meta name="theme-color" content="#ffffff">
+        
+    </head>
     
     <body class="antialiased">
         {{ $slot }}
