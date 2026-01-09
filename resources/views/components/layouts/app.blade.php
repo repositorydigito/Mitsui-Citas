@@ -43,6 +43,10 @@
         @livewireStyles
     </head>
 
+    <link rel="manifest" href="{{ asset('manifest.json') }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/LOGOTEMA1.svg') }}">
+    <meta name="theme-color" content="#ffffff">
+    
     <body class="antialiased">
         {{ $slot }}
 

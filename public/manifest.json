@@ -8,8 +8,18 @@
     "icons": [
         {
             "src": "/favicon.ico",
-            "sizes": "any",
-            "type": "image/svg+xml"
+            "sizes": "48x48",
+            "type": "image/x-icon"
+        },
+        {
+            "src": "/images/LOGOTEMA1.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/images/LOGOTEMA1.png",
+            "sizes": "512x512",
+            "type": "image/png"
         }
     ]
 }
