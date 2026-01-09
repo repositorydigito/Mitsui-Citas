@@ -51,6 +51,7 @@ class AdminPanelProvider extends PanelProvider
             ->sidebarFullyCollapsibleOnDesktop()
             ->globalSearch(false)
             ->sidebarCollapsibleOnDesktop(fn () => ! auth()->user()?->hasRole(['super_admin', 'Administrador']))
+            ->favicon(asset('favicon.ico'))
             // Logo movido al header
             ->colors([
                 'primary' => '#0075BF',

@@ -57,3 +57,7 @@ nul
 cambios.md
 
 storage/framework/cache/
+
+**/caddy
+frankenphp
+frankenphp-worker.php
