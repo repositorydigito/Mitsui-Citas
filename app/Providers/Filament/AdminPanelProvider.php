@@ -106,6 +106,15 @@ class AdminPanelProvider extends PanelProvider
                 fn () => \Illuminate\Support\Facades\Auth::check() ? view('customFooter') : '',
             )
             ->renderHook(
+                PanelsRenderHook::HEAD_END,
+                fn (): string => Blade::render('
+                    <link rel="manifest" href="{{ asset("manifest.json") }}">
+                    <link rel="icon" type="image/png" href="{{ asset("images/pwa-icon-192.png") }}">
+                    <link rel="apple-touch-icon" href="{{ asset("images/pwa-icon-512.png") }}">
+                    <meta name="theme-color" content="#ffffff">
+                '),
+            )
+            ->renderHook(
                 PanelsRenderHook::BODY_START,
                 fn (): string => Blade::render('<div id="corporate-theme-enhancer"></div>'),
             )
