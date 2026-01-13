@@ -12,21 +12,21 @@
                     />
                 </x-filament::input.wrapper>
 
-                <!-- Filtro por marca -->
+                <!-- Filtro por centro/local -->
                 <div class="relative">
                     <select
-                        wire:model.live="filtroMarca"
-                        class="border border-gray-300 rounded-md pr-6 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-w-32"
+                        wire:model.live="filtroCentro"
+                        class="border border-gray-300 rounded-md pr-6 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-w-48"
                     >
-                        <option value="">Todas las marcas</option>
-                        <option value="Toyota">Toyota</option>
-                        <option value="Lexus">Lexus</option>
-                        <option value="Hino">Hino</option>
+                        <option value="">Todos los locales</option>
+                        @foreach($localesDisponibles as $local)
+                            <option value="{{ $local->code }}">{{ $local->name }}</option>
+                        @endforeach
                     </select>
                 </div>
 
                 <!-- Botones de limpiar filtros -->
-                @if($busqueda || $filtroMarca)
+                @if($busqueda || $filtroCentro)
                     <x-filament::button
                         wire:click="limpiarFiltros"
                         color="gray"
@@ -60,6 +60,9 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Marca
                         </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                            Local
+                        </th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
                             Acciones
                         </th>
@@ -74,7 +77,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {{ $servicio['code'] }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <td class="px-6 py-4 text-sm text-gray-500">
                                 <div class="flex flex-wrap gap-1">
                                     @if(is_array($servicio['brand']))
                                         @foreach($servicio['brand'] as $marca)
@@ -96,6 +99,18 @@
                                         </span>
                                     @endif
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                @php
+                                    $local = $localesDisponibles->firstWhere('code', $servicio['center_code']);
+                                @endphp
+                                @if($local)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                                        {{ $local->name }}
+                                    </span>
+                                @else
+                                    <span class="text-gray-400 italic">Sin local asignado</span>
+                                @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                                 <div class="flex justify-center items-center gap-6">
@@ -257,7 +272,7 @@
                             {{ $accionFormulario === 'crear' ? 'Agregar Servicio Adicional' : 'Editar Servicio Adicional' }}
                         </h3>
                         <div class="w-full">
-                            <!-- Layout en 2 columnas -->
+                            <!-- Layout en 2 columnas para Nombre y Código -->
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <!-- Columna Izquierda -->
                                 <div class="space-y-4">
@@ -272,19 +287,6 @@
                                             placeholder="Nombre del servicio"
                                         >
                                         @error('servicioEnEdicion.name') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                                    </div>
-
-                                    
-
-                                    <!-- Campo Activo -->
-                                    <div class="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            id="service_active"
-                                            wire:model="servicioEnEdicion.is_active"
-                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                        >
-                                        <label for="service_active" class="ml-2 text-sm text-gray-700">Activo</label>
                                     </div>
                                 </div>
 
@@ -302,45 +304,153 @@
                                         >
                                         @error('servicioEnEdicion.code') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                                     </div>
-                                    <!-- Campo Marcas (selección múltiple) -->
-                                    <div class="flex flex-col">
-                                        <label class="text-sm font-medium text-gray-700 mb-2">Seleccionar marca</label>
-                                        <div class="flex flex-row justify-between">
-                                            <div class="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    id="brand_toyota"
-                                                    wire:model="servicioEnEdicion.brand"
-                                                    value="Toyota"
-                                                    class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                                >
-                                                <label for="brand_toyota" class="px-2 text-sm text-gray-700">Toyota</label>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    id="brand_lexus"
-                                                    wire:model="servicioEnEdicion.brand"
-                                                    value="Lexus"
-                                                    class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                                >
-                                                <label for="brand_lexus" class="px-2 text-sm text-gray-700">Lexus</label>
-                                            </div>
-                                            <div class="flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    id="brand_hino"
-                                                    wire:model="servicioEnEdicion.brand"
-                                                    value="Hino"
-                                                    class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                                >
-                                                <label for="brand_hino" class="px-2 text-sm text-gray-700">Hino</label>
-                                            </div>
-                                        </div>
-                                        @error('servicioEnEdicion.brand') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                                        @error('servicioEnEdicion.brand.*') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                    <!-- Campo Activo -->
+                                    <div class="flex items-center gap-2">
+                                        <input
+                                            type="checkbox"
+                                            id="service_active"
+                                            wire:model="servicioEnEdicion.is_active"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="service_active" class="ml-2 text-sm text-gray-700">Activo</label>
                                     </div>
                                 </div>
+                            </div>
+
+                            <!-- Grid de 2 columnas: Local (izquierda) y Marca (derecha) -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                                <!-- Columna Izquierda: Seleccionar local -->
+                                <div class="flex flex-col">
+                                    <label for="service_center" class="text-sm font-medium text-gray-700 mb-1">Seleccionar local *</label>
+                                    <select
+                                        id="service_center"
+                                        wire:model="servicioEnEdicion.center_code"
+                                        class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="">Seleccione un local</option>
+                                        @foreach($localesDisponibles as $local)
+                                            <option value="{{ $local->code }}">{{ $local->name }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('servicioEnEdicion.center_code') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
+                                </div>
+
+                                <!-- Columna Derecha: Seleccionar marca -->
+                                <div class="flex flex-col">
+                                    <label class="text-sm font-medium text-gray-700 mb-2">Seleccionar marca *</label>
+                                    <div class="flex flex-row gap-4 flex-wrap">
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="brand_toyota"
+                                                wire:model="servicioEnEdicion.brand"
+                                                value="Toyota"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="brand_toyota" class="ml-2 text-sm text-gray-700">Toyota</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="brand_lexus"
+                                                wire:model="servicioEnEdicion.brand"
+                                                value="Lexus"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="brand_lexus" class="ml-2 text-sm text-gray-700">Lexus</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="brand_hino"
+                                                wire:model="servicioEnEdicion.brand"
+                                                value="Hino"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="brand_hino" class="ml-2 text-sm text-gray-700">Hino</label>
+                                        </div>
+                                    </div>
+                                    @error('servicioEnEdicion.brand') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
+                                    @error('servicioEnEdicion.brand.*') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
+                                </div>
+                            </div>
+
+                            <!-- Campo Días de la Semana (selección múltiple) - Una sola fila horizontal -->
+                            <div class="flex flex-col mt-4">
+                                <label class="text-sm font-medium text-gray-700 mb-2">Días disponibles *</label>
+                                <div class="flex flex-wrap gap-4">
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_monday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="monday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_monday" class="ml-2 text-sm text-gray-700">Lunes</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_tuesday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="tuesday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_tuesday" class="ml-2 text-sm text-gray-700">Martes</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_wednesday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="wednesday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_wednesday" class="ml-2 text-sm text-gray-700">Miércoles</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_thursday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="thursday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_thursday" class="ml-2 text-sm text-gray-700">Jueves</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_friday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="friday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_friday" class="ml-2 text-sm text-gray-700">Viernes</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_saturday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="saturday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_saturday" class="ml-2 text-sm text-gray-700">Sábado</label>
+                                    </div>
+                                    <div class="flex items-center">
+                                        <input
+                                            type="checkbox"
+                                            id="day_sunday"
+                                            wire:model="servicioEnEdicion.available_days"
+                                            value="sunday"
+                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                        >
+                                        <label for="day_sunday" class="ml-2 text-sm text-gray-700">Domingo</label>
+                                    </div>
+                                </div>
+                                @error('servicioEnEdicion.available_days') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
                             </div>
 
                             <!-- Campo Descripción - Ancho completo -->

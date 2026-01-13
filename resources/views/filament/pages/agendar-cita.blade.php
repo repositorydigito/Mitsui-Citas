@@ -596,6 +596,7 @@
                                 <select
                                     id="servicioAdicional"
                                     wire:model.live="servicioAdicionalSeleccionado"
+                                    wire:key="servicios-adicionales-{{ $localSeleccionado }}-{{ $fechaSeleccionada }}-{{ count($serviciosAdicionalesDisponibles) }}"
                                     class="w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring focus:ring-primary-500 focus:ring-opacity-50"
                                 >
                                     <option value="">Selecciona otro servicio</option>

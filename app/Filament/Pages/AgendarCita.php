@@ -1353,6 +1353,18 @@ class AgendarCita extends Page
                 $query->porMarca($marcaVehiculo);
             }
 
+            // ✅ NUEVO: Filtrar por local seleccionado si está disponible
+            if (!empty($this->localSeleccionado)) {
+                Log::info("[AgendarCita] Filtrando servicios adicionales por local: {$this->localSeleccionado}");
+                
+                // Filtrar servicios que sean del local específico O que no tengan center_code (disponibles en todos)
+                $query->where(function($q) {
+                    $q->where('center_code', $this->localSeleccionado)
+                      ->orWhereNull('center_code')
+                      ->orWhere('center_code', '');
+                });
+            }
+
             $servicios = $query->orderBy('name')->get();
 
             // Filtrar los servicios PQLEX y PQRBA si hay tipo de mantenimiento seleccionado
@@ -1362,8 +1374,33 @@ class AgendarCita extends Page
                 });
             }
 
+            // Filtrar por día de la semana si hay fecha seleccionada
+            if (!empty($this->fechaSeleccionada)) {
+                try {
+                    // Convertir la fecha seleccionada a Carbon para obtener el día de la semana
+                    $fecha = \Carbon\Carbon::createFromFormat('d/m/Y', $this->fechaSeleccionada);
+                    // Obtener el nombre del día en inglés y lowercase (monday, tuesday, etc.)
+                    $diaSemana = strtolower($fecha->format('l'));
+
+                    Log::info("[AgendarCita] Filtrando servicios por día de la semana: {$diaSemana} (fecha: {$this->fechaSeleccionada})");
+
+                    // Filtrar servicios que estén disponibles en este día
+                    $servicios = $servicios->filter(function ($servicio) use ($diaSemana) {
+                        // Verificar si el servicio está disponible en el día seleccionado
+                        return $servicio->estaDisponibleEnDia($diaSemana);
+                    });
+
+                    Log::info("[AgendarCita] Servicios disponibles para {$diaSemana}: " . $servicios->count());
+                } catch (\Exception $e) {
+                    Log::warning("[AgendarCita] Error al parsear fecha para filtrar días: " . $e->getMessage());
+                    // Si hay error al parsear la fecha, continuar sin filtrar por día
+                }
+            } else {
+                Log::info("[AgendarCita] Sin fecha seleccionada, mostrando todos los servicios disponibles");
+            }
+
             $this->serviciosAdicionalesDisponibles = $servicios->pluck('name', 'id')->toArray();
-            Log::info('[AgendarCita] Servicios adicionales filtrados por marca cargados: ' . count($this->serviciosAdicionalesDisponibles));
+            Log::info('[AgendarCita] Servicios adicionales finales cargados: ' . count($this->serviciosAdicionalesDisponibles));
         } catch (\Exception $e) {
             Log::error('[AgendarCita] Error al cargar servicios adicionales: ' . $e->getMessage());
             $this->serviciosAdicionalesDisponibles = [];
@@ -1422,6 +1459,20 @@ class AgendarCita extends Page
         // ✅ FIX BUG: Recalcular package_id cuando se seleccionan campañas
         // Modificado por Pablo Aguero - Corrige bug donde package_id no se actualiza al seleccionar campañas
         $this->obtenerPaqueteId();
+    }
+
+    /**
+     * Método que se ejecuta cuando se actualiza la fecha seleccionada
+     * Recarga los servicios adicionales aplicando filtro por día de la semana
+     */
+    public function updatedFechaSeleccionada(): void
+    {
+        Log::info("[AgendarCita] Fecha seleccionada actualizada: {$this->fechaSeleccionada}");
+
+        // Recargar servicios adicionales con el nuevo filtro de día de la semana
+        $this->cargarServiciosAdicionalesDisponibles();
+
+        Log::info("[AgendarCita] Servicios adicionales recargados después de cambio de fecha");
     }
 
     /**
@@ -3953,6 +4004,9 @@ class AgendarCita extends Page
                 $this->fechaSeleccionada = '';
                 $this->limpiarEstadoHorarios(); // ✅ FIX: Usar método centralizado
 
+                // ✅ FIX: Recargar servicios adicionales para mostrar todos los servicios
+                $this->cargarServiciosAdicionalesDisponibles();
+
                 return;
             }
 
@@ -3968,6 +4022,9 @@ class AgendarCita extends Page
 
             // Cargar los horarios disponibles para esta fecha
             $this->cargarHorariosDisponibles();
+
+            // ✅ FIX: Recargar servicios adicionales para filtrar por día de la semana
+            $this->cargarServiciosAdicionalesDisponibles();
 
             // Nota: Las campañas ahora se filtran por mes/año del calendario, no por fecha específica
             // La recarga se realiza en cambiarMes() y cambiarAno()
@@ -4069,6 +4126,10 @@ class AgendarCita extends Page
 
         // Recargar las modalidades disponibles para el nuevo local
         $this->cargarModalidadesDisponibles();
+
+        // ✅ NUEVO: Recargar servicios adicionales con el nuevo filtro de centro
+        $this->cargarServiciosAdicionalesDisponibles();
+        Log::info("[AgendarCita] Servicios adicionales recargados después de cambio de local");
 
         // Si la modalidad actual ya no está disponible, cambiar a Regular
         if (! array_key_exists($this->modalidadServicio, $this->modalidadesDisponibles)) {
