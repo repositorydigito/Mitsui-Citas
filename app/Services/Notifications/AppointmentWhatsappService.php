@@ -69,7 +69,18 @@ class AppointmentWhatsappService
             'template_type' => $templateType,
         ]);
 
-        $to = 'whatsapp:+51' . $appointment->customer_phone;
+        $phone = $appointment->customer_phone;
+        
+        if (str_starts_with($phone, '51') && strlen($phone) === 11) {
+             $to = 'whatsapp:+' . $phone;
+        } else {
+             $to = 'whatsapp:+51' . $phone;
+        }
+
+        Log::info('📲 [WhatsApp] Número destino formateado', [
+            'original' => $phone,
+            'formatted_to' => $to
+        ]);
 
         Log::info('📲 [WhatsApp] Variables construidas para envío', [
             'appointment_id' => $appointment->id,

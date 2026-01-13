@@ -657,7 +657,7 @@ class AgendarCita extends Page
 
                 // ✅ NUEVA SANITIZACIÓN: Limpiar teléfono cargado del usuario
                 $rawPhone = $user->phone ?? '';
-                $sanitized = substr(preg_replace('/[^0-9]/', '', $rawPhone), 0, 9);
+                $sanitized = substr(preg_replace('/[^0-9]/', '', $rawPhone), 0, 11);
                 $this->celularCliente = $sanitized;
 
                 Log::info('[AgendarCita] Datos del cliente cargados automáticamente:', [
@@ -667,7 +667,7 @@ class AgendarCita extends Page
                     'celular' => $this->celularCliente,
                     'telefono_original' => $rawPhone,
                     'telefono_sanitizado' => $sanitized,
-                    'es_valido' => strlen($this->celularCliente) === 9,
+                    'es_valido' => strlen($this->celularCliente) === 9 || strlen($this->celularCliente) === 11,
                     'user_id' => $user->id,
                     'document_type' => $user->document_type,
                     'document_number' => $user->document_number,
@@ -5238,11 +5238,12 @@ class AgendarCita extends Page
         // Limpiar el número de celular (eliminar espacios y caracteres no numéricos)
         $celularLimpio = preg_replace('/[^0-9]/', '', $this->celularCliente);
 
-        // Verificar que tenga exactamente 9 dígitos
-        if (strlen($celularLimpio) !== 9) {
+        // Verificar que tenga 9 u 11 dígitos
+        $length = strlen($celularLimpio);
+        if ($length !== 9 && $length !== 11) {
             \Filament\Notifications\Notification::make()
                 ->title('Número de celular inválido')
-                ->body('El número de celular debe tener exactamente 9 dígitos. Por favor, edita tus datos y corrige el número.')
+                ->body('El número de celular debe tener 9 u 11 dígitos. Por favor, edita tus datos y corrige el número.')
                 ->danger()
                 ->persistent()
                 ->send();
@@ -5272,8 +5273,8 @@ class AgendarCita extends Page
      */
     public function updatedCelularCliente($value): void
     {
-        // Limpiar automáticamente el número (solo dígitos, máximo 9)
-        $this->celularCliente = substr(preg_replace('/[^0-9]/', '', $value), 0, 9);
+        // Limpiar automáticamente el número (solo dígitos, máximo 11)
+        $this->celularCliente = substr(preg_replace('/[^0-9]/', '', $value), 0, 11);
 
         Log::debug('[AgendarCita] Celular actualizado', [
             'valor_original' => $value,
@@ -5288,13 +5289,13 @@ class AgendarCita extends Page
      */
     protected function validarYSanitizarTelefono(?string $telefono): array
     {
-        $sanitized = substr(preg_replace('/[^0-9]/', '', $telefono ?? ''), 0, 9);
+        $sanitized = substr(preg_replace('/[^0-9]/', '', $telefono ?? ''), 0, 11);
         $length = strlen($sanitized);
 
-        $isValid = $length === 9;
+        $isValid = $length === 9 || $length === 11;
         $message = $isValid
-            ? "Teléfono válido ($length/9 dígitos)"
-            : "Faltan " . (9 - $length) . " dígitos ($length/9)";
+            ? "Teléfono válido ($length dígitos)"
+            : "El teléfono debe tener 9 u 11 dígitos (actual: $length)";
 
         return [$isValid, $sanitized, $message];
     }
@@ -5311,7 +5312,8 @@ class AgendarCita extends Page
         if (!$isValidPhone) {
             \Filament\Notifications\Notification::make()
                 ->title('Teléfono inválido')
-                ->body("El teléfono debe tener exactamente 9 dígitos. $phoneMessage")
+                ->title('Teléfono inválido')
+                ->body("El teléfono debe tener 9 u 11 dígitos. $phoneMessage")
                 ->warning()
                 ->send();
 
@@ -5328,14 +5330,14 @@ class AgendarCita extends Page
             'nombreCliente' => 'required|string|max:255',
             'apellidoCliente' => 'required|string|max:255',
             'emailCliente' => 'required|email|max:255',
-            'celularCliente' => 'required|digits:9',
+            'celularCliente' => ['required', 'regex:/^(\d{9}|\d{11})$/'],
         ], [
             'nombreCliente.required' => 'El nombre es obligatorio',
             'apellidoCliente.required' => 'El apellido es obligatorio',
             'emailCliente.required' => 'El email es obligatorio',
             'emailCliente.email' => 'El email debe tener un formato válido',
             'celularCliente.required' => 'El celular es obligatorio',
-            'celularCliente.digits' => 'El celular debe tener exactamente 9 dígitos',
+            'celularCliente.regex' => 'El celular debe tener 9 u 11 dígitos',
         ]);
 
         $user = Auth::user();

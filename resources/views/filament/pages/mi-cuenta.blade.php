@@ -200,13 +200,13 @@
                                     placeholder="Celular"
                                     wire:model="datosEdicion.celular"
                                     class="w-full px-3 py-2 border border-primary-600 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
-                                    maxlength="9"
-                                    pattern="\d{9}"
+                                    maxlength="11"
+                                    pattern="(\d{9}|\d{11})"
                                     required
                                     inputmode="numeric"
-                                    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 9)"
+                                    oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
                                 >
-                                @error('datosEdicion.celular') <span class="text-primary-500 text-xs">El número debe tener exactamente 9 dígitos</span> @enderror
+                                @error('datosEdicion.celular') <span class="text-primary-500 text-xs">El número debe tener 9 u 11 dígitos</span> @enderror
                             </div>
 
                             <div>

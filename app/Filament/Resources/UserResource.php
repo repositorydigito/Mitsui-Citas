@@ -76,7 +76,9 @@ class UserResource extends Resource
                                 Forms\Components\TextInput::make('phone')
                                     ->label('Teléfono')
                                     ->tel()
-                                    ->maxLength(20)
+                                    ->regex('/^(\d{9}|\d{11})$/')
+                                    ->validationAttribute('teléfono')
+                                    ->maxLength(11)
                                     ->placeholder('Ej: +51 999 888 777'),
 
                                 Forms\Components\TextInput::make('password')

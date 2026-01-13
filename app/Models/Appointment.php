@@ -79,23 +79,22 @@ class Appointment extends Model
 
     /**
      * Mutator: Sanitiza el teléfono al asignarlo
-     * Asegura que solo contenga dígitos y máximo 9 caracteres
+     * Asegura que solo contenga dígitos y máximo 11 caracteres (antes 9)
      */
     public function setCustomerPhoneAttribute($value)
     {
-        // Limpiar: solo dígitos, máximo 9
-        $sanitized = substr(preg_replace('/[^0-9]/', '', $value ?? ''), 0, 9);
+        // Limpiar: solo dígitos, máximo 11
+        $sanitized = substr(preg_replace('/[^0-9]/', '', $value ?? ''), 0, 11);
         $this->attributes['customer_phone'] = $sanitized;
     }
 
     /**
-     * Validar que el teléfono sea exactamente 9 dígitos
-     * Útil para controles adicionales
+     * Validar que el teléfono sea 9 u 11 dígitos
      */
     public function isValidPhone(): bool
     {
-        return strlen($this->customer_phone ?? '') === 9
-            && ctype_digit($this->customer_phone);
+        $len = strlen($this->customer_phone ?? '');
+        return ($len === 9 || $len === 11) && ctype_digit($this->customer_phone);
     }
 
     /**
@@ -121,7 +120,7 @@ class Appointment extends Model
                 ]);
 
                 throw new \InvalidArgumentException(
-                    "El teléfono debe tener exactamente 9 dígitos. Recibido: '{$appointment->customer_phone}'"
+                    "El teléfono debe tener 9 u 11 dígitos. Recibido: '{$appointment->customer_phone}'"
                 );
             }
         });
