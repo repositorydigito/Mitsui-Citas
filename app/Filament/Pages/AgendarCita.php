@@ -657,7 +657,7 @@ class AgendarCita extends Page
 
                 // ✅ NUEVA SANITIZACIÓN: Limpiar teléfono cargado del usuario
                 $rawPhone = $user->phone ?? '';
-                $sanitized = substr(preg_replace('/[^0-9]/', '', $rawPhone), 0, 11);
+                $sanitized = substr(preg_replace('/[^0-9]/', '', $rawPhone), 0, 9);
                 $this->celularCliente = $sanitized;
 
                 Log::info('[AgendarCita] Datos del cliente cargados automáticamente:', [
@@ -667,7 +667,7 @@ class AgendarCita extends Page
                     'celular' => $this->celularCliente,
                     'telefono_original' => $rawPhone,
                     'telefono_sanitizado' => $sanitized,
-                    'es_valido' => strlen($this->celularCliente) === 9 || strlen($this->celularCliente) === 11,
+                    'es_valido' => strlen($this->celularCliente) === 9,
                     'user_id' => $user->id,
                     'document_type' => $user->document_type,
                     'document_number' => $user->document_number,
@@ -1353,6 +1353,18 @@ class AgendarCita extends Page
                 $query->porMarca($marcaVehiculo);
             }
 
+            // ✅ NUEVO: Filtrar por local seleccionado si está disponible
+            if (!empty($this->localSeleccionado)) {
+                Log::info("[AgendarCita] Filtrando servicios adicionales por local: {$this->localSeleccionado}");
+
+                // Filtrar servicios que sean del local específico O que no tengan center_code (disponibles en todos)
+                $query->where(function($q) {
+                    $q->where('center_code', $this->localSeleccionado)
+                        ->orWhereNull('center_code')
+                        ->orWhere('center_code', '');
+                });
+            }
+
             $servicios = $query->orderBy('name')->get();
 
             // Filtrar los servicios PQLEX y PQRBA si hay tipo de mantenimiento seleccionado
@@ -1362,8 +1374,33 @@ class AgendarCita extends Page
                 });
             }
 
+            // Filtrar por día de la semana si hay fecha seleccionada
+            if (!empty($this->fechaSeleccionada)) {
+                try {
+                    // Convertir la fecha seleccionada a Carbon para obtener el día de la semana
+                    $fecha = \Carbon\Carbon::createFromFormat('d/m/Y', $this->fechaSeleccionada);
+                    // Obtener el nombre del día en inglés y lowercase (monday, tuesday, etc.)
+                    $diaSemana = strtolower($fecha->format('l'));
+
+                    Log::info("[AgendarCita] Filtrando servicios por día de la semana: {$diaSemana} (fecha: {$this->fechaSeleccionada})");
+
+                    // Filtrar servicios que estén disponibles en este día
+                    $servicios = $servicios->filter(function ($servicio) use ($diaSemana) {
+                        // Verificar si el servicio está disponible en el día seleccionado
+                        return $servicio->estaDisponibleEnDia($diaSemana);
+                    });
+
+                    Log::info("[AgendarCita] Servicios disponibles para {$diaSemana}: " . $servicios->count());
+                } catch (\Exception $e) {
+                    Log::warning("[AgendarCita] Error al parsear fecha para filtrar días: " . $e->getMessage());
+                    // Si hay error al parsear la fecha, continuar sin filtrar por día
+                }
+            } else {
+                Log::info("[AgendarCita] Sin fecha seleccionada, mostrando todos los servicios disponibles");
+            }
+
             $this->serviciosAdicionalesDisponibles = $servicios->pluck('name', 'id')->toArray();
-            Log::info('[AgendarCita] Servicios adicionales filtrados por marca cargados: ' . count($this->serviciosAdicionalesDisponibles));
+            Log::info('[AgendarCita] Servicios adicionales finales cargados: ' . count($this->serviciosAdicionalesDisponibles));
         } catch (\Exception $e) {
             Log::error('[AgendarCita] Error al cargar servicios adicionales: ' . $e->getMessage());
             $this->serviciosAdicionalesDisponibles = [];
@@ -1422,6 +1459,20 @@ class AgendarCita extends Page
         // ✅ FIX BUG: Recalcular package_id cuando se seleccionan campañas
         // Modificado por Pablo Aguero - Corrige bug donde package_id no se actualiza al seleccionar campañas
         $this->obtenerPaqueteId();
+    }
+
+    /**
+     * Método que se ejecuta cuando se actualiza la fecha seleccionada
+     * Recarga los servicios adicionales aplicando filtro por día de la semana
+     */
+    public function updatedFechaSeleccionada(): void
+    {
+        Log::info("[AgendarCita] Fecha seleccionada actualizada: {$this->fechaSeleccionada}");
+
+        // Recargar servicios adicionales con el nuevo filtro de día de la semana
+        $this->cargarServiciosAdicionalesDisponibles();
+
+        Log::info("[AgendarCita] Servicios adicionales recargados después de cambio de fecha");
     }
 
     /**
@@ -1500,8 +1551,8 @@ class AgendarCita extends Page
             $comentarioFinal .= "Comentarios: " . $this->comentarios;
         }
 
-         // ✅ PARA CLIENTES WILDCARD: Agregar teléfono y correo al final
-         if ($isWildcardClient) {
+        // ✅ PARA CLIENTES WILDCARD: Agregar teléfono y correo al final
+        if ($isWildcardClient) {
             // Agregar teléfono del cliente
             if (!empty($user->phone)) {
                 if (!empty($comentarioFinal)) {
@@ -1537,32 +1588,32 @@ class AgendarCita extends Page
                 $comentarioFinal .= "Campañas: " . $campana['titulo'];
             }
         }
- // ✅ PARA CLIENTES NORMALES: Orden específico
- if (!$isWildcardClient) {
-    // 1. Mantenimiento
-    if (!empty($this->tipoMantenimiento)) {
-        if (!empty($comentarioFinal)) {
-            $comentarioFinal .= "\n";
-        }
-        $comentarioFinal .= "Mantenimiento: " . $this->tipoMantenimiento;
-    }
+        // ✅ PARA CLIENTES NORMALES: Orden específico
+        if (!$isWildcardClient) {
+            // 1. Mantenimiento
+            if (!empty($this->tipoMantenimiento)) {
+                if (!empty($comentarioFinal)) {
+                    $comentarioFinal .= "\n";
+                }
+                $comentarioFinal .= "Mantenimiento: " . $this->tipoMantenimiento;
+            }
 
-    // 2. Servicios extras elegidos
-    if (!empty($this->serviciosExtrasElegidos)) {
-        if (!empty($comentarioFinal)) {
-            $comentarioFinal .= "\n";
-        }
-        $comentarioFinal .= "Servicios extras elegidos: " . $this->serviciosExtrasElegidos;
-    }
+            // 2. Servicios extras elegidos
+            if (!empty($this->serviciosExtrasElegidos)) {
+                if (!empty($comentarioFinal)) {
+                    $comentarioFinal .= "\n";
+                }
+                $comentarioFinal .= "Servicios extras elegidos: " . $this->serviciosExtrasElegidos;
+            }
 
-    // 3. Comentarios
-    if (!empty($this->comentarios)) {
-        if (!empty($comentarioFinal)) {
-            $comentarioFinal .= "\n";
+            // 3. Comentarios
+            if (!empty($this->comentarios)) {
+                if (!empty($comentarioFinal)) {
+                    $comentarioFinal .= "\n";
+                }
+                $comentarioFinal .= "Comentarios: " . $this->comentarios;
+            }
         }
-        $comentarioFinal .= "Comentarios: " . $this->comentarios;
-    }
-}
         return $comentarioFinal;
     }
 
@@ -1662,7 +1713,7 @@ class AgendarCita extends Page
                 ->where('brand', 'like', "%{$marca}%")
                 ->where(function ($query) use ($nombreLocal) {
                     $query->where('premises', $this->localSeleccionado)  // Buscar por código
-                        ->orWhere('premises', $nombreLocal);            // Buscar por nombre
+                    ->orWhere('premises', $nombreLocal);            // Buscar por nombre
                 })
                 ->get();
 
@@ -1821,34 +1872,40 @@ class AgendarCita extends Page
                 });
             }
 
-            // ✅ FIX Ricardo: Filtrar por fecha de cita seleccionada
-            if (! empty($this->fechaSeleccionada)) {
-                // Convertir fecha del formato 'd/m/Y' a 'Y-m-d' para la comparación con la BD
+            // ✅ FIX Ricardo: Filtrar por mes/año del calendario visible
+            if (! empty($this->mesActual) && ! empty($this->anoActual)) {
+                // Convertir mes/año a rango de fechas del mes completo
                 try {
-                    $fechaCita = Carbon::createFromFormat('d/m/Y', $this->fechaSeleccionada)->format('Y-m-d');
-                    Log::info("[AgendarCita] Filtrando campañas por fecha de cita: {$fechaCita}");
+                    $primerDia = Carbon::createFromDate($this->anoActual, $this->mesActual, 1)->startOfDay();
+                    $ultimoDia = Carbon::createFromDate($this->anoActual, $this->mesActual, 1)->endOfMonth()->endOfDay();
 
-                    $query->where(function ($q) use ($fechaCita) {
-                        // Incluir campañas donde la fecha de la cita esté dentro del rango [start_date, end_date]
-                        $q->where(function ($subQ) use ($fechaCita) {
+                    $primerDiaStr = $primerDia->format('Y-m-d');
+                    $ultimoDiaStr = $ultimoDia->format('Y-m-d');
+
+                    Log::info("[AgendarCita] Filtrando campañas por mes/año: {$this->mesActual}/{$this->anoActual} (rango: {$primerDiaStr} - {$ultimoDiaStr})");
+
+                    $query->where(function ($q) use ($primerDiaStr, $ultimoDiaStr) {
+                        // Incluir campañas que estén activas en algún momento del mes visible
+                        $q->where(function ($subQ) use ($primerDiaStr, $ultimoDiaStr) {
                             $subQ->whereNotNull('start_date')
                                 ->whereNotNull('end_date')
-                                ->whereDate('start_date', '<=', $fechaCita)
-                                ->whereDate('end_date', '>=', $fechaCita);
+                                // La campaña está activa si: start_date <= último_día_mes AND end_date >= primer_día_mes
+                                ->whereDate('start_date', '<=', $ultimoDiaStr)
+                                ->whereDate('end_date', '>=', $primerDiaStr);
                         })
-                        // O incluir campañas sin fechas definidas (campañas permanentes)
-                        ->orWhere(function ($subQ) {
-                            $subQ->whereNull('start_date')
-                                ->whereNull('end_date');
-                        });
+                            // O incluir campañas sin fechas definidas (campañas permanentes)
+                            ->orWhere(function ($subQ) {
+                                $subQ->whereNull('start_date')
+                                    ->whereNull('end_date');
+                            });
                     });
 
-                    Log::info("[AgendarCita] Filtro de fecha aplicado correctamente");
+                    Log::info("[AgendarCita] Filtro de mes/año aplicado correctamente");
                 } catch (\Exception $e) {
-                    Log::error("[AgendarCita] Error al parsear fecha para filtro de campañas: {$e->getMessage()}");
+                    Log::error("[AgendarCita] Error al filtrar campañas por mes/año: {$e->getMessage()}");
                 }
             } else {
-                Log::info("[AgendarCita] No hay fecha seleccionada, mostrando todas las campañas disponibles");
+                Log::info("[AgendarCita] No hay mes/año definido, mostrando todas las campañas disponibles");
             }
 
             $campanas = $query->get();
@@ -2510,16 +2567,7 @@ class AgendarCita extends Page
                 $serviceModes[] = 'express';
             }
             $appointment->service_mode = implode(', ', $serviceModes);
-
-            // Determinar maintenance_type: puede ser tipo de mantenimiento o título de campaña
-            $maintenanceType = $this->tipoMantenimiento;
-            if (empty($maintenanceType) && !empty($this->campanaSeleccionada)) {
-                $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
-                if ($campana) {
-                    $maintenanceType = $campana['titulo'];
-                }
-            }
-            $appointment->maintenance_type = $maintenanceType;
+            $appointment->maintenance_type = $this->tipoMantenimiento;
             $appointment->comments = $this->comentarios;
 
             // ✅ GUARDAR SELECCIONES EN CAMPO JSON:
@@ -2533,7 +2581,7 @@ class AgendarCita extends Page
             } else {
                 // Clientes normales: solo guardar si NO hay mantenimiento Y tienen selecciones
                 $shouldSaveWildcardSelections = empty($this->tipoMantenimiento) &&
-                                               (!empty($this->serviciosAdicionales) || !empty($this->campanaSeleccionada));
+                    (!empty($this->serviciosAdicionales) || !empty($this->campanaSeleccionada));
             }
 
             if ($shouldSaveWildcardSelections) {
@@ -3518,7 +3566,7 @@ class AgendarCita extends Page
             // ✅ FIX: Mejorar clave de cache incluyendo timestamp para validación
             $timestampValidacion = floor(time() / 60); // Revalidar cada minuto
             $cacheKey = "horarios_disponibles:{$codigoLocal}:{$fechaStr}:" .
-                       ($this->usarHorariosC4C ? 'c4c' : 'local') . ":{$timestampValidacion}";
+                ($this->usarHorariosC4C ? 'c4c' : 'local') . ":{$timestampValidacion}";
             $cacheTtl = 180; // 3 minutos de caché
 
             // ✅ FIX: Intentar obtener estructura completa desde caché
@@ -3905,6 +3953,10 @@ class AgendarCita extends Page
 
         // Regenerar el calendario
         $this->generarCalendario();
+
+        // ✅ FIX Ricardo: Recargar campañas filtrando por el nuevo mes/año
+        $this->cargarCampanas();
+        Log::info("[AgendarCita] Campañas recargadas para mes {$this->mesActual}/{$this->anoActual}: " . count($this->campanasDisponibles) . " campañas disponibles");
     }
 
     /**
@@ -3917,6 +3969,10 @@ class AgendarCita extends Page
 
         // Regenerar el calendario
         $this->generarCalendario();
+
+        // ✅ FIX Ricardo: Recargar campañas filtrando por el nuevo año
+        $this->cargarCampanas();
+        Log::info("[AgendarCita] Campañas recargadas para año {$this->anoActual}: " . count($this->campanasDisponibles) . " campañas disponibles");
     }
 
     /**
@@ -3948,6 +4004,9 @@ class AgendarCita extends Page
                 $this->fechaSeleccionada = '';
                 $this->limpiarEstadoHorarios(); // ✅ FIX: Usar método centralizado
 
+                // ✅ FIX: Recargar servicios adicionales para mostrar todos los servicios
+                $this->cargarServiciosAdicionalesDisponibles();
+
                 return;
             }
 
@@ -3964,9 +4023,11 @@ class AgendarCita extends Page
             // Cargar los horarios disponibles para esta fecha
             $this->cargarHorariosDisponibles();
 
-            // ✅ FIX Ricardo: Recargar campañas filtrando por la fecha seleccionada
-            $this->cargarCampanas();
-            Log::info("[AgendarCita] Campañas recargadas para fecha {$fecha}: " . count($this->campanasDisponibles) . " campañas disponibles");
+            // ✅ FIX: Recargar servicios adicionales para filtrar por día de la semana
+            $this->cargarServiciosAdicionalesDisponibles();
+
+            // Nota: Las campañas ahora se filtran por mes/año del calendario, no por fecha específica
+            // La recarga se realiza en cambiarMes() y cambiarAno()
 
         } catch (\Exception $e) {
             Log::error('[AgendarCita] Error al seleccionar fecha: ' . $e->getMessage());
@@ -4065,6 +4126,10 @@ class AgendarCita extends Page
 
         // Recargar las modalidades disponibles para el nuevo local
         $this->cargarModalidadesDisponibles();
+
+        // ✅ NUEVO: Recargar servicios adicionales con el nuevo filtro de centro
+        $this->cargarServiciosAdicionalesDisponibles();
+        Log::info("[AgendarCita] Servicios adicionales recargados después de cambio de local");
 
         // Si la modalidad actual ya no está disponible, cambiar a Regular
         if (! array_key_exists($this->modalidadServicio, $this->modalidadesDisponibles)) {
@@ -4335,36 +4400,8 @@ class AgendarCita extends Page
             $appointment->premise_id = $this->locales[$this->localSeleccionado]['id'];
             $appointment->appointment_date = Carbon::createFromFormat('d/m/Y', $this->fechaSeleccionada);
             $appointment->appointment_time = $this->horaSeleccionada;
-
-            // Determinar maintenance_type: puede ser tipo de mantenimiento o título de campaña
-            $maintenanceType = $this->tipoMantenimiento;
-
-            Log::info('🔍 [AgendarCita] Determinando maintenance_type', [
-                'tipoMantenimiento' => $this->tipoMantenimiento,
-                'campanaSeleccionada' => $this->campanaSeleccionada,
-                'campanasDisponibles_count' => count($this->campanasDisponibles ?? [])
-            ]);
-
-            if (empty($maintenanceType) && !empty($this->campanaSeleccionada)) {
-                $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
-                Log::info('🔍 [AgendarCita] Buscando campaña', [
-                    'campana_encontrada' => $campana ? 'SI' : 'NO',
-                    'campana_data' => $campana
-                ]);
-                if ($campana) {
-                    $maintenanceType = $campana['titulo'];
-                    Log::info('✅ [AgendarCita] Campaña asignada a maintenance_type', [
-                        'titulo' => $maintenanceType
-                    ]);
-                }
-            }
-
-            $appointment->maintenance_type = $maintenanceType;
+            $appointment->maintenance_type = $this->tipoMantenimiento;
             $appointment->status = 'pending';
-
-            Log::info('💾 [AgendarCita] maintenance_type final antes de guardar', [
-                'maintenance_type' => $appointment->maintenance_type
-            ]);
 
             // NUEVOS CAMPOS PARA INTEGRACIÓN COMPLETA
             // ✅ DETECTAR CLIENTE COMODÍN ANTES DE ASIGNAR PACKAGE_ID
@@ -4976,16 +5013,7 @@ class AgendarCita extends Page
             $serviceModes[] = 'express';
         }
         $appointment->service_mode = implode(', ', $serviceModes);
-
-        // Determinar maintenance_type: puede ser tipo de mantenimiento o título de campaña
-        $maintenanceType = $this->tipoMantenimiento;
-        if (empty($maintenanceType) && !empty($this->campanaSeleccionada)) {
-            $campana = collect($this->campanasDisponibles)->firstWhere('id', $this->campanaSeleccionada);
-            if ($campana) {
-                $maintenanceType = $campana['titulo'];
-            }
-        }
-        $appointment->maintenance_type = $maintenanceType;
+        $appointment->maintenance_type = $this->tipoMantenimiento;
         $appointment->comments = $this->comentarios;
         $appointment->status = 'pending'; // Pendiente hasta que C4C confirme
         $appointment->is_synced = false;
@@ -5238,12 +5266,11 @@ class AgendarCita extends Page
         // Limpiar el número de celular (eliminar espacios y caracteres no numéricos)
         $celularLimpio = preg_replace('/[^0-9]/', '', $this->celularCliente);
 
-        // Verificar que tenga 9 u 11 dígitos
-        $length = strlen($celularLimpio);
-        if ($length !== 9 && $length !== 11) {
+        // Verificar que tenga exactamente 9 dígitos
+        if (strlen($celularLimpio) !== 9) {
             \Filament\Notifications\Notification::make()
                 ->title('Número de celular inválido')
-                ->body('El número de celular debe tener 9 u 11 dígitos. Por favor, edita tus datos y corrige el número.')
+                ->body('El número de celular debe tener exactamente 9 dígitos. Por favor, edita tus datos y corrige el número.')
                 ->danger()
                 ->persistent()
                 ->send();
@@ -5273,8 +5300,8 @@ class AgendarCita extends Page
      */
     public function updatedCelularCliente($value): void
     {
-        // Limpiar automáticamente el número (solo dígitos, máximo 11)
-        $this->celularCliente = substr(preg_replace('/[^0-9]/', '', $value), 0, 11);
+        // Limpiar automáticamente el número (solo dígitos, máximo 9)
+        $this->celularCliente = substr(preg_replace('/[^0-9]/', '', $value), 0, 9);
 
         Log::debug('[AgendarCita] Celular actualizado', [
             'valor_original' => $value,
@@ -5289,13 +5316,13 @@ class AgendarCita extends Page
      */
     protected function validarYSanitizarTelefono(?string $telefono): array
     {
-        $sanitized = substr(preg_replace('/[^0-9]/', '', $telefono ?? ''), 0, 11);
+        $sanitized = substr(preg_replace('/[^0-9]/', '', $telefono ?? ''), 0, 9);
         $length = strlen($sanitized);
 
-        $isValid = $length === 9 || $length === 11;
+        $isValid = $length === 9;
         $message = $isValid
-            ? "Teléfono válido ($length dígitos)"
-            : "El teléfono debe tener 9 u 11 dígitos (actual: $length)";
+            ? "Teléfono válido ($length/9 dígitos)"
+            : "Faltan " . (9 - $length) . " dígitos ($length/9)";
 
         return [$isValid, $sanitized, $message];
     }
@@ -5312,8 +5339,7 @@ class AgendarCita extends Page
         if (!$isValidPhone) {
             \Filament\Notifications\Notification::make()
                 ->title('Teléfono inválido')
-                ->title('Teléfono inválido')
-                ->body("El teléfono debe tener 9 u 11 dígitos. $phoneMessage")
+                ->body("El teléfono debe tener exactamente 9 dígitos. $phoneMessage")
                 ->warning()
                 ->send();
 
@@ -5330,14 +5356,14 @@ class AgendarCita extends Page
             'nombreCliente' => 'required|string|max:255',
             'apellidoCliente' => 'required|string|max:255',
             'emailCliente' => 'required|email|max:255',
-            'celularCliente' => ['required', 'regex:/^(\d{9}|\d{11})$/'],
+            'celularCliente' => 'required|digits:9',
         ], [
             'nombreCliente.required' => 'El nombre es obligatorio',
             'apellidoCliente.required' => 'El apellido es obligatorio',
             'emailCliente.required' => 'El email es obligatorio',
             'emailCliente.email' => 'El email debe tener un formato válido',
             'celularCliente.required' => 'El celular es obligatorio',
-            'celularCliente.regex' => 'El celular debe tener 9 u 11 dígitos',
+            'celularCliente.digits' => 'El celular debe tener exactamente 9 dígitos',
         ]);
 
         $user = Auth::user();

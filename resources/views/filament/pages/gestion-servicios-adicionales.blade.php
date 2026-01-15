@@ -12,21 +12,21 @@
                     />
                 </x-filament::input.wrapper>
 
-                <!-- Filtro por marca -->
+                <!-- Filtro por centro/local -->
                 <div class="relative">
                     <select
-                        wire:model.live="filtroMarca"
-                        class="border border-gray-300 rounded-md pr-6 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-w-32"
+                        wire:model.live="filtroCentro"
+                        class="border border-gray-300 rounded-md pr-6 py-2 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent min-w-48"
                     >
-                        <option value="">Todas las marcas</option>
-                        <option value="Toyota">Toyota</option>
-                        <option value="Lexus">Lexus</option>
-                        <option value="Hino">Hino</option>
+                        <option value="">Todos los locales</option>
+                        @foreach($localesDisponibles as $local)
+                            <option value="{{ $local->code }}">{{ $local->name }}</option>
+                        @endforeach
                     </select>
                 </div>
 
                 <!-- Botones de limpiar filtros -->
-                @if($busqueda || $filtroMarca)
+                @if($busqueda || $filtroCentro)
                     <x-filament::button
                         wire:click="limpiarFiltros"
                         color="gray"
@@ -47,9 +47,9 @@
 
         <!-- Tabla -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full divide-y divide-gray-200">
-                <thead class="bg-primary-500">
+            <div class="overflow-x-auto">
+                <table class="w-full divide-y divide-gray-200">
+                    <thead class="bg-primary-500">
                     <tr>
                         <th class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Nombre
@@ -60,12 +60,15 @@
                         <th class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                             Marca
                         </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                            Local
+                        </th>
                         <th class="px-6 py-3 text-center text-xs font-medium text-white uppercase tracking-wider">
                             Acciones
                         </th>
                     </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
                     @forelse($this->serviciosPaginados as $servicio)
                         <tr>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -74,7 +77,7 @@
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {{ $servicio['code'] }}
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            <td class="px-6 py-4 text-sm text-gray-500">
                                 <div class="flex flex-wrap gap-1">
                                     @if(is_array($servicio['brand']))
                                         @foreach($servicio['brand'] as $marca)
@@ -96,6 +99,18 @@
                                         </span>
                                     @endif
                                 </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                @php
+                                    $local = $localesDisponibles->firstWhere('code', $servicio['center_code']);
+                                @endphp
+                                @if($local)
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                                        {{ $local->name }}
+                                    </span>
+                                @else
+                                    <span class="text-gray-400 italic">Sin local asignado</span>
+                                @endif
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                                 <div class="flex justify-center items-center gap-6">
@@ -144,9 +159,9 @@
                             </td>
                         </tr>
                     @endforelse
-                </tbody>
-            </table>
-        </div>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Paginación -->
@@ -173,7 +188,7 @@
                         $currentPage = $this->serviciosPaginados->currentPage();
                         $lastPage = $this->serviciosPaginados->lastPage();
                         $showPages = [];
-                        
+
                         if ($lastPage <= 7) {
                             // Si hay 7 páginas o menos, mostrar todas
                             $showPages = range(1, $lastPage);
@@ -231,81 +246,99 @@
 
     <!-- Modal para agregar/editar servicio -->
     @if($isFormModalOpen)
-    <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-        <!-- Overlay de fondo oscuro (clic para cerrar) -->
-        <div class="fixed inset-0 bg-black/50" aria-hidden="true" wire:click="cerrarFormModal"></div>
+        <div class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <!-- Overlay de fondo oscuro (clic para cerrar) -->
+            <div class="fixed inset-0 bg-black/50" aria-hidden="true" wire:click="cerrarFormModal"></div>
 
-        <!-- Contenedor para centrar vertical y horizontalmente -->
-        <div class="flex items-center justify-center min-h-screen px-4 py-2 text-center">
+            <!-- Contenedor para centrar vertical y horizontalmente -->
+            <div class="flex items-center justify-center min-h-screen px-4 py-2 text-center">
 
-            <!-- Modal -->
-            <div class="relative inline-block bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all max-w-2xl w-full z-[9999]" @click.stop>
-                <!-- Contenido del modal -->
-                <div class="bg-white px-6 py-4">
-                    <!-- Botón de cerrar en la esquina superior derecha -->
-                    <div class="absolute top-0 right-0 pt-3 pr-3 z-[10000]">
-                        <button type="button" wire:click="cerrarFormModal" class="bg-white rounded-md text-gray-600 hover:text-gray-900 focus:outline-none">
-                            <span class="sr-only">Cerrar</span>
-                            <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
+                <!-- Modal -->
+                <div class="relative inline-block bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all max-w-2xl w-full z-[9999]" @click.stop>
+                    <!-- Contenido del modal -->
+                    <div class="bg-white px-6 py-4">
+                        <!-- Botón de cerrar en la esquina superior derecha -->
+                        <div class="absolute top-0 right-0 pt-3 pr-3 z-[10000]">
+                            <button type="button" wire:click="cerrarFormModal" class="bg-white rounded-md text-gray-600 hover:text-gray-900 focus:outline-none">
+                                <span class="sr-only">Cerrar</span>
+                                <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
 
-                    <div class="flex flex-col items-center">
-                        <h3 class="text-xl font-bold text-primary-600 text-center mb-4" id="modal-title">
-                            {{ $accionFormulario === 'crear' ? 'Agregar Servicio Adicional' : 'Editar Servicio Adicional' }}
-                        </h3>
-                        <div class="w-full">
-                            <!-- Layout en 2 columnas -->
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <!-- Columna Izquierda -->
-                                <div class="space-y-4">
-                                    <!-- Campo Nombre -->
-                                    <div class="flex flex-col">
-                                        <label for="service_name" class="text-sm font-medium text-gray-700 mb-1">Nombre</label>
-                                        <input
-                                            type="text"
-                                            id="service_name"
-                                            wire:model="servicioEnEdicion.name"
-                                            class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            placeholder="Nombre del servicio"
-                                        >
-                                        @error('servicioEnEdicion.name') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                        <div class="flex flex-col items-center">
+                            <h3 class="text-xl font-bold text-primary-600 text-center mb-4" id="modal-title">
+                                {{ $accionFormulario === 'crear' ? 'Agregar Servicio Adicional' : 'Editar Servicio Adicional' }}
+                            </h3>
+                            <div class="w-full">
+                                <!-- Layout en 2 columnas para Nombre y Código -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <!-- Columna Izquierda -->
+                                    <div class="space-y-4">
+                                        <!-- Campo Nombre -->
+                                        <div class="flex flex-col">
+                                            <label for="service_name" class="text-sm font-medium text-gray-700 mb-1">Nombre</label>
+                                            <input
+                                                type="text"
+                                                id="service_name"
+                                                wire:model="servicioEnEdicion.name"
+                                                class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                placeholder="Nombre del servicio"
+                                            >
+                                            @error('servicioEnEdicion.name') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                        </div>
                                     </div>
 
-                                    
-
-                                    <!-- Campo Activo -->
-                                    <div class="flex items-center gap-2">
-                                        <input
-                                            type="checkbox"
-                                            id="service_active"
-                                            wire:model="servicioEnEdicion.is_active"
-                                            class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                        >
-                                        <label for="service_active" class="ml-2 text-sm text-gray-700">Activo</label>
+                                    <!-- Columna Derecha -->
+                                    <div class="space-y-4">
+                                        <!-- Campo Código -->
+                                        <div class="flex flex-col">
+                                            <label for="service_code" class="text-sm font-medium text-gray-700 mb-1">Código</label>
+                                            <input
+                                                type="text"
+                                                id="service_code"
+                                                wire:model="servicioEnEdicion.code"
+                                                class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                placeholder="Código único"
+                                            >
+                                            @error('servicioEnEdicion.code') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                        </div>
+                                        <!-- Campo Activo -->
+                                        <div class="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                id="service_active"
+                                                wire:model="servicioEnEdicion.is_active"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="service_active" class="ml-2 text-sm text-gray-700">Activo</label>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- Columna Derecha -->
-                                <div class="space-y-4">
-                                    <!-- Campo Código -->
+                                <!-- Grid de 2 columnas: Local (izquierda) y Marca (derecha) -->
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                                    <!-- Columna Izquierda: Seleccionar local -->
                                     <div class="flex flex-col">
-                                        <label for="service_code" class="text-sm font-medium text-gray-700 mb-1">Código</label>
-                                        <input
-                                            type="text"
-                                            id="service_code"
-                                            wire:model="servicioEnEdicion.code"
+                                        <label for="service_center" class="text-sm font-medium text-gray-700 mb-1">Seleccionar local *</label>
+                                        <select
+                                            id="service_center"
+                                            wire:model="servicioEnEdicion.center_code"
                                             class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            placeholder="Código único"
                                         >
-                                        @error('servicioEnEdicion.code') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                            <option value="">Seleccione un local</option>
+                                            @foreach($localesDisponibles as $local)
+                                                <option value="{{ $local->code }}">{{ $local->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        @error('servicioEnEdicion.center_code') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
                                     </div>
-                                    <!-- Campo Marcas (selección múltiple) -->
+
+                                    <!-- Columna Derecha: Seleccionar marca -->
                                     <div class="flex flex-col">
-                                        <label class="text-sm font-medium text-gray-700 mb-2">Seleccionar marca</label>
-                                        <div class="flex flex-row justify-between">
+                                        <label class="text-sm font-medium text-gray-700 mb-2">Seleccionar marca *</label>
+                                        <div class="flex flex-row gap-4 flex-wrap">
                                             <div class="flex items-center">
                                                 <input
                                                     type="checkbox"
@@ -314,7 +347,7 @@
                                                     value="Toyota"
                                                     class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                                 >
-                                                <label for="brand_toyota" class="px-2 text-sm text-gray-700">Toyota</label>
+                                                <label for="brand_toyota" class="ml-2 text-sm text-gray-700">Toyota</label>
                                             </div>
                                             <div class="flex items-center">
                                                 <input
@@ -324,7 +357,7 @@
                                                     value="Lexus"
                                                     class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                                 >
-                                                <label for="brand_lexus" class="px-2 text-sm text-gray-700">Lexus</label>
+                                                <label for="brand_lexus" class="ml-2 text-sm text-gray-700">Lexus</label>
                                             </div>
                                             <div class="flex items-center">
                                                 <input
@@ -334,50 +367,127 @@
                                                     value="Hino"
                                                     class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                                                 >
-                                                <label for="brand_hino" class="px-2 text-sm text-gray-700">Hino</label>
+                                                <label for="brand_hino" class="ml-2 text-sm text-gray-700">Hino</label>
                                             </div>
                                         </div>
-                                        @error('servicioEnEdicion.brand') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
-                                        @error('servicioEnEdicion.brand.*') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                        @error('servicioEnEdicion.brand') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
+                                        @error('servicioEnEdicion.brand.*') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- Campo Descripción - Ancho completo -->
-                            <div class="flex flex-col mt-4">
-                                <label for="service_description" class="text-sm font-medium text-gray-700 mb-1">Descripción</label>
-                                <textarea
-                                    id="service_description"
-                                    wire:model="servicioEnEdicion.description"
-                                    rows="3"
-                                    class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    placeholder="Descripción (opcional)"
-                                ></textarea>
-                            </div>
+                                <!-- Campo Días de la Semana (selección múltiple) - Una sola fila horizontal -->
+                                <div class="flex flex-col mt-4">
+                                    <label class="text-sm font-medium text-gray-700 mb-2">Días disponibles *</label>
+                                    <div class="flex flex-wrap gap-4">
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_monday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="monday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_monday" class="ml-2 text-sm text-gray-700">Lunes</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_tuesday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="tuesday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_tuesday" class="ml-2 text-sm text-gray-700">Martes</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_wednesday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="wednesday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_wednesday" class="ml-2 text-sm text-gray-700">Miércoles</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_thursday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="thursday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_thursday" class="ml-2 text-sm text-gray-700">Jueves</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_friday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="friday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_friday" class="ml-2 text-sm text-gray-700">Viernes</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_saturday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="saturday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_saturday" class="ml-2 text-sm text-gray-700">Sábado</label>
+                                        </div>
+                                        <div class="flex items-center">
+                                            <input
+                                                type="checkbox"
+                                                id="day_sunday"
+                                                wire:model="servicioEnEdicion.available_days"
+                                                value="sunday"
+                                                class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                            >
+                                            <label for="day_sunday" class="ml-2 text-sm text-gray-700">Domingo</label>
+                                        </div>
+                                    </div>
+                                    @error('servicioEnEdicion.available_days') <span class="text-red-500 text-sm">{{ $message }}</span> @enderror
+                                </div>
 
-                            <!-- Botones -->
-                            <div class="flex justify-end space-x-2 mt-6 gap-4">
-                                <button
-                                    type="button"
-                                    wire:click="cerrarFormModal"
-                                    class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    wire:click="guardarServicio"
-                                    class="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                >
-                                    {{ $accionFormulario === 'crear' ? 'Crear' : 'Actualizar' }}
-                                </button>
+                                <!-- Campo Descripción - Ancho completo -->
+                                <div class="flex flex-col mt-4">
+                                    <label for="service_description" class="text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                                    <textarea
+                                        id="service_description"
+                                        wire:model="servicioEnEdicion.description"
+                                        rows="3"
+                                        class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        placeholder="Descripción (opcional)"
+                                    ></textarea>
+                                </div>
+
+                                <!-- Botones -->
+                                <div class="flex justify-end space-x-2 mt-6 gap-4">
+                                    <button
+                                        type="button"
+                                        wire:click="cerrarFormModal"
+                                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        wire:click="guardarServicio"
+                                        class="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                                    >
+                                        {{ $accionFormulario === 'crear' ? 'Crear' : 'Actualizar' }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
     @endif
 
     <style>

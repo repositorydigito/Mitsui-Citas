@@ -35,8 +35,11 @@ class GestionServiciosAdicionales extends Page
     // Propiedad para búsqueda
     public string $busqueda = '';
 
-    // Propiedad para filtro de marca
-    public string $filtroMarca = '';
+    // Propiedad para filtro de centro
+    public string $filtroCentro = '';
+
+    // Propiedad para almacenar los locales/centros disponibles
+    public Collection $localesDisponibles;
 
     // Estado de los servicios
     public array $estadoServicios = [];
@@ -51,7 +54,24 @@ class GestionServiciosAdicionales extends Page
     public function mount(): void
     {
         $this->currentPage = request()->query('page', 1);
+        $this->cargarLocalesDisponibles();
         $this->cargarServiciosAdicionales();
+    }
+
+    public function cargarLocalesDisponibles(): void
+    {
+        try {
+            $this->localesDisponibles = \App\Models\Local::where('is_active', true)
+                ->orderBy('name')
+                ->get();
+        } catch (\Exception $e) {
+            \Filament\Notifications\Notification::make()
+                ->title('Error al cargar locales')
+                ->body('Ha ocurrido un error: '.$e->getMessage())
+                ->danger()
+                ->send();
+            $this->localesDisponibles = collect();
+        }
     }
 
     public function cargarServiciosAdicionales(): void
@@ -63,15 +83,22 @@ class GestionServiciosAdicionales extends Page
                 // Asegurar que brand siempre sea un array
                 $brand = $servicio->brand;
                 if (!is_array($brand)) {
-                    // Si es string, convertir a array
                     $brand = $brand ? [$brand] : ['Toyota'];
                 }
-                
+
+                // Asegurar que available_days siempre sea un array
+                $availableDays = $servicio->available_days;
+                if (!is_array($availableDays)) {
+                    $availableDays = $availableDays ? [$availableDays] : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+                }
+
                 return [
                     'id' => $servicio->id,
                     'name' => $servicio->name,
                     'code' => $servicio->code,
                     'brand' => $brand,
+                    'center_code' => $servicio->center_code,
+                    'available_days' => $availableDays,
                     'description' => $servicio->description,
                     'is_active' => $servicio->is_active,
                 ];
@@ -94,25 +121,20 @@ class GestionServiciosAdicionales extends Page
     public function getServiciosPaginadosProperty(): LengthAwarePaginator
     {
         $serviciosFiltrados = $this->serviciosAdicionales;
-        
+
         // Filtro por búsqueda de texto
         if (! empty($this->busqueda)) {
             $terminoBusqueda = strtolower($this->busqueda);
             $serviciosFiltrados = $serviciosFiltrados->filter(function ($servicio) use ($terminoBusqueda) {
                 return str_contains(strtolower($servicio['name']), $terminoBusqueda) ||
-                       str_contains(strtolower($servicio['code']), $terminoBusqueda);
+                    str_contains(strtolower($servicio['code']), $terminoBusqueda);
             });
         }
 
-        // Filtro por marca
-        if (! empty($this->filtroMarca)) {
+        // Filtro por centro
+        if (! empty($this->filtroCentro)) {
             $serviciosFiltrados = $serviciosFiltrados->filter(function ($servicio) {
-                // Si brand es un array, verificar si contiene la marca filtrada
-                if (is_array($servicio['brand'])) {
-                    return in_array($this->filtroMarca, $servicio['brand']);
-                }
-                // Compatibilidad con datos antiguos que pueden ser string
-                return $servicio['brand'] === $this->filtroMarca;
+                return $servicio['center_code'] === $this->filtroCentro;
             });
         }
 
@@ -173,7 +195,9 @@ class GestionServiciosAdicionales extends Page
             'id' => null,
             'name' => '',
             'code' => '',
-            'brand' => ['Toyota'], // Inicializar como array con Toyota por defecto
+            'brand' => ['Toyota'], // Inicializar con Toyota por defecto
+            'center_code' => '', // Código de centro único
+            'available_days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'], // Todos los días por defecto
             'description' => '',
             'is_active' => true,
         ];
@@ -185,17 +209,19 @@ class GestionServiciosAdicionales extends Page
         try {
             // Always fetch fresh data from database to avoid inconsistencies
             $servicioModel = AdditionalService::findOrFail($id);
-            
+
             $this->accionFormulario = 'editar';
             $this->servicioEnEdicion = [
                 'id' => $servicioModel->id,
                 'name' => $servicioModel->name,
                 'code' => $servicioModel->code,
                 'brand' => is_array($servicioModel->brand) ? $servicioModel->brand : ($servicioModel->brand ? [$servicioModel->brand] : ['Toyota']),
+                'center_code' => $servicioModel->center_code ?? '',
+                'available_days' => is_array($servicioModel->available_days) ? $servicioModel->available_days : ($servicioModel->available_days ? [$servicioModel->available_days] : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
                 'description' => $servicioModel->description,
                 'is_active' => $servicioModel->is_active,
             ];
-            
+
             $this->isFormModalOpen = true;
         } catch (\Exception $e) {
             \Filament\Notifications\Notification::make()
@@ -213,32 +239,69 @@ class GestionServiciosAdicionales extends Page
             if (!is_array($this->servicioEnEdicion['brand'])) {
                 $this->servicioEnEdicion['brand'] = [];
             }
-            
+
+            // Asegurar que available_days sea un array
+            if (!is_array($this->servicioEnEdicion['available_days'])) {
+                $this->servicioEnEdicion['available_days'] = [];
+            }
+
             // Filtrar valores vacíos y duplicados
             $this->servicioEnEdicion['brand'] = array_values(array_unique(array_filter($this->servicioEnEdicion['brand'])));
-            
-            // Validación adicional manual para debugging en QA
+            $this->servicioEnEdicion['available_days'] = array_values(array_unique(array_filter($this->servicioEnEdicion['available_days'])));
+
+            // Validación adicional manual
             if (empty($this->servicioEnEdicion['brand'])) {
                 throw new \Exception('Debe seleccionar al menos una marca');
             }
-            
+
+            if (empty($this->servicioEnEdicion['center_code'])) {
+                throw new \Exception('Debe seleccionar un local/centro');
+            }
+
+            if (empty($this->servicioEnEdicion['available_days'])) {
+                throw new \Exception('Debe seleccionar al menos un día de la semana');
+            }
+
+            // Verificar que las marcas sean válidas
             foreach ($this->servicioEnEdicion['brand'] as $marca) {
                 if (!in_array($marca, ['Toyota', 'Lexus', 'Hino'])) {
-                    throw new \Exception("La marca '{$marca}' no es válida. Debe ser Toyota, Lexus o Hino");
+                    throw new \Exception("La marca '{$marca}' no es válida");
                 }
             }
-            
+
+            // Verificar que el centro sea válido
+            $validCenterCodes = \App\Models\Local::where('is_active', true)
+                ->pluck('code')
+                ->toArray();
+
+            if (!in_array($this->servicioEnEdicion['center_code'], $validCenterCodes)) {
+                throw new \Exception("El centro seleccionado no es válido");
+            }
+
+            // Verificar que los días sean válidos
+            $validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            foreach ($this->servicioEnEdicion['available_days'] as $day) {
+                if (!in_array($day, $validDays)) {
+                    throw new \Exception("El día '{$day}' no es válido");
+                }
+            }
+
             $this->validate([
                 'servicioEnEdicion.name' => 'required|string|max:255',
                 'servicioEnEdicion.code' => 'required|string|max:50',
                 'servicioEnEdicion.brand' => 'required|array|min:1',
                 'servicioEnEdicion.brand.*' => 'in:Toyota,Lexus,Hino',
+                'servicioEnEdicion.center_code' => 'required|string',
+                'servicioEnEdicion.available_days' => 'required|array|min:1',
             ], [
                 'servicioEnEdicion.name.required' => 'El nombre es obligatorio',
                 'servicioEnEdicion.code.required' => 'El código es obligatorio',
                 'servicioEnEdicion.brand.required' => 'Debe seleccionar al menos una marca',
                 'servicioEnEdicion.brand.min' => 'Debe seleccionar al menos una marca',
                 'servicioEnEdicion.brand.*.in' => 'Las marcas deben ser Toyota, Lexus o Hino',
+                'servicioEnEdicion.center_code.required' => 'Debe seleccionar un local/centro',
+                'servicioEnEdicion.available_days.required' => 'Debe seleccionar al menos un día',
+                'servicioEnEdicion.available_days.min' => 'Debe seleccionar al menos un día',
             ]);
 
             if ($this->accionFormulario === 'editar' && ! empty($this->servicioEnEdicion['id'])) {
@@ -250,6 +313,8 @@ class GestionServiciosAdicionales extends Page
             $servicio->name = $this->servicioEnEdicion['name'];
             $servicio->code = $this->servicioEnEdicion['code'];
             $servicio->brand = $this->servicioEnEdicion['brand'];
+            $servicio->center_code = $this->servicioEnEdicion['center_code'];
+            $servicio->available_days = $this->servicioEnEdicion['available_days'];
             $servicio->description = $this->servicioEnEdicion['description'] ?? null;
             $servicio->is_active = $this->servicioEnEdicion['is_active'] ?? true;
             $servicio->save();
@@ -306,16 +371,16 @@ class GestionServiciosAdicionales extends Page
         $this->currentPage = 1;
     }
 
-    public function limpiarFiltroMarca(): void
+    public function limpiarFiltroCentro(): void
     {
-        $this->filtroMarca = '';
+        $this->filtroCentro = '';
         $this->currentPage = 1;
     }
 
     public function limpiarFiltros(): void
     {
         $this->busqueda = '';
-        $this->filtroMarca = '';
+        $this->filtroCentro = '';
         $this->currentPage = 1;
     }
 
@@ -324,7 +389,7 @@ class GestionServiciosAdicionales extends Page
         $this->currentPage = 1;
     }
 
-    public function updatedFiltroMarca(): void
+    public function updatedFiltroCentro(): void
     {
         $this->currentPage = 1;
     }
@@ -335,35 +400,35 @@ class GestionServiciosAdicionales extends Page
     }
 
     /**
-     * Método para manejar la selección/deselección de marcas
+     * Método para manejar la selección/deselección de días
      */
-    public function toggleMarca(string $marca): void
+    public function toggleDia(string $day): void
     {
-        // Asegurar que brand sea un array
-        if (!is_array($this->servicioEnEdicion['brand'])) {
-            $this->servicioEnEdicion['brand'] = [];
+        // Asegurar que available_days sea un array
+        if (!is_array($this->servicioEnEdicion['available_days'])) {
+            $this->servicioEnEdicion['available_days'] = [];
         }
 
-        // Toggle de la marca
-        if (in_array($marca, $this->servicioEnEdicion['brand'])) {
-            // Remover la marca
-            $this->servicioEnEdicion['brand'] = array_values(array_filter($this->servicioEnEdicion['brand'], function($m) use ($marca) {
-                return $m !== $marca;
+        // Toggle del día
+        if (in_array($day, $this->servicioEnEdicion['available_days'])) {
+            // Remover el día
+            $this->servicioEnEdicion['available_days'] = array_values(array_filter($this->servicioEnEdicion['available_days'], function($d) use ($day) {
+                return $d !== $day;
             }));
         } else {
-            // Agregar la marca
-            $this->servicioEnEdicion['brand'][] = $marca;
+            // Agregar el día
+            $this->servicioEnEdicion['available_days'][] = $day;
         }
 
         // Limpiar duplicados y reindexar
-        $this->servicioEnEdicion['brand'] = array_values(array_unique($this->servicioEnEdicion['brand']));
+        $this->servicioEnEdicion['available_days'] = array_values(array_unique($this->servicioEnEdicion['available_days']));
     }
 
     /**
-     * Verificar si una marca está seleccionada
+     * Verificar si un día está seleccionado
      */
-    public function isMarcaSeleccionada(string $marca): bool
+    public function isDiaSeleccionado(string $day): bool
     {
-        return is_array($this->servicioEnEdicion['brand'] ?? []) && in_array($marca, $this->servicioEnEdicion['brand']);
+        return is_array($this->servicioEnEdicion['available_days'] ?? []) && in_array($day, $this->servicioEnEdicion['available_days']);
     }
 }
