@@ -231,13 +231,7 @@ class DashboardKpi extends Page
     protected function calcularKpisPrincipales($query): void
     {
         $this->citasGeneradas = (clone $query)
-            ->where(function($q) {
-                $q->where('status', 'confirmed')
-                  ->orWhere(function($q2) {
-                      $q2->where('status', 'cancelled')
-                         ->where('rescheduled', 0);
-                  });
-            })
+            ->where('status', 'confirmed')
             ->where(function($q) {
                 $q->whereNull('comments')
                   ->orWhere('comments', 'NOT LIKE', '%prueba%');
@@ -248,7 +242,9 @@ class DashboardKpi extends Page
             ->where('status', 'confirmed')
             ->where(function($q) {
                 $q->whereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.activo') = true")
-                  ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') = true");
+                  ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.en_trabajo.completado') = true")
+                  ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.trabajo_concluido.activo') = true")
+                  ->orWhereRaw("JSON_EXTRACT(frontend_states, '$.trabajo_concluido.completado') = true");
             })
             ->count();
 
@@ -268,13 +264,7 @@ class DashboardKpi extends Page
 
         // Citas con mantenimiento (de las citas generadas)
         $citasConMantenimiento = (clone $query)
-            ->where(function($q) {
-                $q->where('status', 'confirmed')
-                  ->orWhere(function($q2) {
-                      $q2->where('status', 'cancelled')
-                         ->where('rescheduled', 0);
-                  });
-            })
+            ->where('status', 'confirmed')
             ->where(function($q) {
                 $q->whereNull('comments')
                   ->orWhere('comments', 'NOT LIKE', '%prueba%');
@@ -290,31 +280,10 @@ class DashboardKpi extends Page
 
         $this->citasDiferidas = (clone $query)->where('rescheduled', 1)->count();
 
-        // Citas sin mantenimiento (de las citas generadas)
-        $citasSinMantenimiento = (clone $query)
-            ->where(function($q) {
-                $q->where('status', 'confirmed')
-                  ->orWhere(function($q2) {
-                      $q2->where('status', 'cancelled')
-                         ->where('rescheduled', 0);
-                  });
-            })
-            ->where(function($q) {
-                $q->whereNull('comments')
-                  ->orWhere('comments', 'NOT LIKE', '%prueba%');
-            })
-            ->where(function($q) {
-                $q->whereNull('maintenance_type')
-                  ->orWhere('maintenance_type', '');
-            })
-            ->whereNotNull('wildcard_selections')
-            ->where('wildcard_selections', '!=', 'null')
-            ->where('wildcard_selections', '!=', '')
-            ->count();
-
-        $this->citasMantenimientoPrepagados = $citasSinMantenimiento;
+        // Citas sin mantenimiento (citas generadas - citas con mantenimiento)
+        $this->citasMantenimientoPrepagados = $this->citasGeneradas - $citasConMantenimiento;
         $this->porcentajePrepagados = $this->citasGeneradas > 0 
-            ? round(($citasSinMantenimiento / $this->citasGeneradas) * 100) 
+            ? round(($this->citasMantenimientoPrepagados / $this->citasGeneradas) * 100) 
             : 0;
     }
 
