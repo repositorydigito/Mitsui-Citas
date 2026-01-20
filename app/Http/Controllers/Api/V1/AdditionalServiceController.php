@@ -15,10 +15,11 @@ class AdditionalServiceController extends Controller
     /**
      * Listar servicios adicionales disponibles
      *
-     * GET /api/v1/additional-services?vehicle_id=37
+     * GET /api/v1/additional-services?vehicle_id=37&center_code=M013
      *
      * Query params:
      * - vehicle_id (opcional): ID del vehículo para filtrar por marca
+     * - center_code (opcional): Código del local para filtrar servicios disponibles
      *
      * @return JsonResponse
      */
@@ -44,6 +45,21 @@ class AdditionalServiceController extends Controller
                 }
             }
 
+            // Filtrar por local si se proporciona center_code
+            $centerCode = request()->query('center_code');
+
+            if ($centerCode) {
+                $query->where(function($q) use ($centerCode) {
+                    $q->whereJsonContains('center_code', $centerCode)
+                        ->orWhereNull('center_code')
+                        ->orWhereJsonLength('center_code', 0);
+                });
+
+                Log::info('[API] Filtrando servicios adicionales por local', [
+                    'center_code' => $centerCode,
+                ]);
+            }
+
             $services = $query->orderBy('name', 'asc')->get();
 
             Log::info('[API] Listando servicios adicionales', [
@@ -62,12 +78,15 @@ class AdditionalServiceController extends Controller
                         'price' => $service->price,
                         'duration_minutes' => $service->duration_minutes,
                         'brand' => $service->brand,
+                        'center_code' => $service->center_code,
+                        'available_days' => $service->available_days,
                         'is_active' => $service->is_active,
                     ];
                 }),
                 'filters' => [
                     'vehicle_id' => $vehicleId,
                     'brand' => $vehicleBrand,
+                    'center_code' => $centerCode ?? null,
                 ],
             ]);
 

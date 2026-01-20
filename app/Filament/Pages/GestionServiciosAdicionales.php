@@ -92,12 +92,18 @@ class GestionServiciosAdicionales extends Page
                     $availableDays = $availableDays ? [$availableDays] : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
                 }
 
+                // Asegurar que center_code siempre sea un array
+                $centerCode = $servicio->center_code;
+                if (!is_array($centerCode)) {
+                    $centerCode = $centerCode ? [$centerCode] : [];
+                }
+
                 return [
                     'id' => $servicio->id,
                     'name' => $servicio->name,
                     'code' => $servicio->code,
                     'brand' => $brand,
-                    'center_code' => $servicio->center_code,
+                    'center_code' => $centerCode,
                     'available_days' => $availableDays,
                     'description' => $servicio->description,
                     'is_active' => $servicio->is_active,
@@ -134,7 +140,7 @@ class GestionServiciosAdicionales extends Page
         // Filtro por centro
         if (! empty($this->filtroCentro)) {
             $serviciosFiltrados = $serviciosFiltrados->filter(function ($servicio) {
-                return $servicio['center_code'] === $this->filtroCentro;
+                return is_array($servicio['center_code']) && in_array($this->filtroCentro, $servicio['center_code']);
             });
         }
 
@@ -196,7 +202,7 @@ class GestionServiciosAdicionales extends Page
             'name' => '',
             'code' => '',
             'brand' => ['Toyota'], // Inicializar con Toyota por defecto
-            'center_code' => '', // Código de centro único
+            'center_code' => [], // Array de códigos de centro (múltiple)
             'available_days' => ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'], // Todos los días por defecto
             'description' => '',
             'is_active' => true,
@@ -216,7 +222,7 @@ class GestionServiciosAdicionales extends Page
                 'name' => $servicioModel->name,
                 'code' => $servicioModel->code,
                 'brand' => is_array($servicioModel->brand) ? $servicioModel->brand : ($servicioModel->brand ? [$servicioModel->brand] : ['Toyota']),
-                'center_code' => $servicioModel->center_code ?? '',
+                'center_code' => is_array($servicioModel->center_code) ? $servicioModel->center_code : ($servicioModel->center_code ? [$servicioModel->center_code] : []),
                 'available_days' => is_array($servicioModel->available_days) ? $servicioModel->available_days : ($servicioModel->available_days ? [$servicioModel->available_days] : ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']),
                 'description' => $servicioModel->description,
                 'is_active' => $servicioModel->is_active,
@@ -245,8 +251,14 @@ class GestionServiciosAdicionales extends Page
                 $this->servicioEnEdicion['available_days'] = [];
             }
 
+            // Asegurar que center_code sea un array
+            if (!is_array($this->servicioEnEdicion['center_code'])) {
+                $this->servicioEnEdicion['center_code'] = [];
+            }
+
             // Filtrar valores vacíos y duplicados
             $this->servicioEnEdicion['brand'] = array_values(array_unique(array_filter($this->servicioEnEdicion['brand'])));
+            $this->servicioEnEdicion['center_code'] = array_values(array_unique(array_filter($this->servicioEnEdicion['center_code'])));
             $this->servicioEnEdicion['available_days'] = array_values(array_unique(array_filter($this->servicioEnEdicion['available_days'])));
 
             // Validación adicional manual
@@ -255,7 +267,7 @@ class GestionServiciosAdicionales extends Page
             }
 
             if (empty($this->servicioEnEdicion['center_code'])) {
-                throw new \Exception('Debe seleccionar un local/centro');
+                throw new \Exception('Debe seleccionar al menos un local/centro');
             }
 
             if (empty($this->servicioEnEdicion['available_days'])) {
@@ -269,13 +281,15 @@ class GestionServiciosAdicionales extends Page
                 }
             }
 
-            // Verificar que el centro sea válido
+            // Verificar que los centros sean válidos
             $validCenterCodes = \App\Models\Local::where('is_active', true)
                 ->pluck('code')
                 ->toArray();
 
-            if (!in_array($this->servicioEnEdicion['center_code'], $validCenterCodes)) {
-                throw new \Exception("El centro seleccionado no es válido");
+            foreach ($this->servicioEnEdicion['center_code'] as $centerCode) {
+                if (!in_array($centerCode, $validCenterCodes)) {
+                    throw new \Exception("El centro '{$centerCode}' no es válido");
+                }
             }
 
             // Verificar que los días sean válidos
@@ -291,7 +305,7 @@ class GestionServiciosAdicionales extends Page
                 'servicioEnEdicion.code' => 'required|string|max:50',
                 'servicioEnEdicion.brand' => 'required|array|min:1',
                 'servicioEnEdicion.brand.*' => 'in:Toyota,Lexus,Hino',
-                'servicioEnEdicion.center_code' => 'required|string',
+                'servicioEnEdicion.center_code' => 'required|array|min:1',
                 'servicioEnEdicion.available_days' => 'required|array|min:1',
             ], [
                 'servicioEnEdicion.name.required' => 'El nombre es obligatorio',
@@ -299,7 +313,8 @@ class GestionServiciosAdicionales extends Page
                 'servicioEnEdicion.brand.required' => 'Debe seleccionar al menos una marca',
                 'servicioEnEdicion.brand.min' => 'Debe seleccionar al menos una marca',
                 'servicioEnEdicion.brand.*.in' => 'Las marcas deben ser Toyota, Lexus o Hino',
-                'servicioEnEdicion.center_code.required' => 'Debe seleccionar un local/centro',
+                'servicioEnEdicion.center_code.required' => 'Debe seleccionar al menos un local/centro',
+                'servicioEnEdicion.center_code.min' => 'Debe seleccionar al menos un local/centro',
                 'servicioEnEdicion.available_days.required' => 'Debe seleccionar al menos un día',
                 'servicioEnEdicion.available_days.min' => 'Debe seleccionar al menos un día',
             ]);
@@ -430,5 +445,38 @@ class GestionServiciosAdicionales extends Page
     public function isDiaSeleccionado(string $day): bool
     {
         return is_array($this->servicioEnEdicion['available_days'] ?? []) && in_array($day, $this->servicioEnEdicion['available_days']);
+    }
+
+    /**
+     * Método para manejar la selección/deselección de locales
+     */
+    public function toggleLocal(string $centerCode): void
+    {
+        // Asegurar que center_code sea un array
+        if (!is_array($this->servicioEnEdicion['center_code'])) {
+            $this->servicioEnEdicion['center_code'] = [];
+        }
+
+        // Toggle del local
+        if (in_array($centerCode, $this->servicioEnEdicion['center_code'])) {
+            // Remover el local
+            $this->servicioEnEdicion['center_code'] = array_values(array_filter($this->servicioEnEdicion['center_code'], function($c) use ($centerCode) {
+                return $c !== $centerCode;
+            }));
+        } else {
+            // Agregar el local
+            $this->servicioEnEdicion['center_code'][] = $centerCode;
+        }
+
+        // Limpiar duplicados y reindexar
+        $this->servicioEnEdicion['center_code'] = array_values(array_unique($this->servicioEnEdicion['center_code']));
+    }
+
+    /**
+     * Verificar si un local está seleccionado
+     */
+    public function isLocalSeleccionado(string $centerCode): bool
+    {
+        return is_array($this->servicioEnEdicion['center_code'] ?? []) && in_array($centerCode, $this->servicioEnEdicion['center_code']);
     }
 }

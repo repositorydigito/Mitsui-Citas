@@ -28,6 +28,7 @@ class AdditionalService extends Model
         'price' => 'decimal:2',
         'duration_minutes' => 'integer',
         'brand' => 'array',
+        'center_code' => 'array',
         'available_days' => 'array',
     ];
 
@@ -63,7 +64,7 @@ class AdditionalService extends Model
      */
     public function scopePorCentro($query, $centerCode)
     {
-        return $query->where('center_code', $centerCode);
+        return $query->whereJsonContains('center_code', $centerCode);
     }
 
     /**
@@ -90,7 +91,7 @@ class AdditionalService extends Model
      */
     public function estaDisponibleParaCentro($centerCode)
     {
-        return $this->center_code === $centerCode;
+        return in_array($centerCode, $this->center_code ?? []);
     }
 
     /**
@@ -119,7 +120,7 @@ class AdditionalService extends Model
     }
 
     /**
-     * Obtener el nombre del centro asignado
+     * Obtener el nombre de los centros asignados
      */
     public function getCentroTextoAttribute()
     {
@@ -127,9 +128,13 @@ class AdditionalService extends Model
             return 'Sin asignar';
         }
 
-        $center = \App\Models\Local::where('code', $this->center_code)->first();
+        $centers = \App\Models\Local::whereIn('code', $this->center_code)->get();
 
-        return $center ? $center->name : 'Centro no encontrado';
+        if ($centers->isEmpty()) {
+            return 'Centro(s) no encontrado(s)';
+        }
+
+        return $centers->pluck('name')->implode(', ');
     }
 
     /**

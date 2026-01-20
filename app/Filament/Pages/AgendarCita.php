@@ -1357,11 +1357,12 @@ class AgendarCita extends Page
             if (!empty($this->localSeleccionado)) {
                 Log::info("[AgendarCita] Filtrando servicios adicionales por local: {$this->localSeleccionado}");
 
-                // Filtrar servicios que sean del local específico O que no tengan center_code (disponibles en todos)
+                // Filtrar servicios que contengan el local en su array center_code
+                // O que tengan center_code vacío (disponibles en todos los locales)
                 $query->where(function($q) {
-                    $q->where('center_code', $this->localSeleccionado)
+                    $q->whereJsonContains('center_code', $this->localSeleccionado)
                         ->orWhereNull('center_code')
-                        ->orWhere('center_code', '');
+                        ->orWhereJsonLength('center_code', 0);
                 });
             }
 

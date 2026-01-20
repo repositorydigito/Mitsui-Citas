@@ -100,17 +100,23 @@
                                     @endif
                                 </div>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                @php
-                                    $local = $localesDisponibles->firstWhere('code', $servicio['center_code']);
-                                @endphp
-                                @if($local)
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
-                                        {{ $local->name }}
-                                    </span>
-                                @else
-                                    <span class="text-gray-400 italic">Sin local asignado</span>
-                                @endif
+                            <td class="px-6 py-4 text-sm text-gray-500">
+                                <div class="flex flex-wrap gap-1">
+                                    @if(is_array($servicio['center_code']) && !empty($servicio['center_code']))
+                                        @foreach($servicio['center_code'] as $centerCode)
+                                            @php
+                                                $local = $localesDisponibles->firstWhere('code', $centerCode);
+                                            @endphp
+                                            @if($local)
+                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+                                                    {{ $local->name }}
+                                                </span>
+                                            @endif
+                                        @endforeach
+                                    @else
+                                        <span class="text-gray-400 italic">Sin local asignado</span>
+                                    @endif
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
                                 <div class="flex justify-center items-center gap-6">
@@ -319,19 +325,23 @@
 
                                 <!-- Grid de 2 columnas: Local (izquierda) y Marca (derecha) -->
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                    <!-- Columna Izquierda: Seleccionar local -->
+                                    <!-- Columna Izquierda: Seleccionar locales (checkboxes múltiples) -->
                                     <div class="flex flex-col">
-                                        <label for="service_center" class="text-sm font-medium text-gray-700 mb-1">Seleccionar local *</label>
-                                        <select
-                                            id="service_center"
-                                            wire:model="servicioEnEdicion.center_code"
-                                            class="border border-gray-300 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        >
-                                            <option value="">Seleccione un local</option>
+                                        <label class="text-sm font-medium text-gray-700 mb-2">Seleccionar local(es) *</label>
+                                        <div class="flex flex-col gap-2 max-h-40 overflow-y-auto border border-gray-300 rounded-md p-2">
                                             @foreach($localesDisponibles as $local)
-                                                <option value="{{ $local->code }}">{{ $local->name }}</option>
+                                                <div class="flex items-center">
+                                                    <input
+                                                        type="checkbox"
+                                                        id="center_{{ $local->code }}"
+                                                        wire:model="servicioEnEdicion.center_code"
+                                                        value="{{ $local->code }}"
+                                                        class="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                    >
+                                                    <label for="center_{{ $local->code }}" class="ml-2 text-sm text-gray-700">{{ $local->name }}</label>
+                                                </div>
                                             @endforeach
-                                        </select>
+                                        </div>
                                         @error('servicioEnEdicion.center_code') <span class="text-red-500 text-sm mt-1">{{ $message }}</span> @enderror
                                     </div>
 
