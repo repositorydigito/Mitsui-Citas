@@ -5,9 +5,14 @@
         <meta name="application-name" content="{{ config('app.name') }}">
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- PWA Manifest (Android / PC) -->
         <link rel="manifest" href="{{ asset('manifest.json') }}">
-        <link rel="icon" type="image/png" href="{{ asset('images/pwa-icon-192.png') }}">
-        <link rel="apple-touch-icon" href="{{ asset('images/pwa-icon-512.png') }}">
+
+        <!-- Icono para Pestaña de Navegador y Barra de Tareas (PC) -->
+        <link rel="icon" type="image/png" href="{{ asset('images/pc-icon-192.png') }}">
+
+        <!-- Icono exclusivo para iOS (iPhone / iPad) -->
+        <link rel="apple-touch-icon" href="{{ asset('images/ios-icon-180.png') }}">
         <meta name="theme-color" content="#ffffff">
 
         <title>{{ $title ?? config('app.name') }}</title>

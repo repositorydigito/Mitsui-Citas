@@ -109,8 +109,8 @@ class AdminPanelProvider extends PanelProvider
                 PanelsRenderHook::HEAD_END,
                 fn (): string => Blade::render('
                     <link rel="manifest" href="{{ asset("manifest.json") }}">
-                    <link rel="icon" type="image/png" href="{{ asset("images/pwa-icon-192.png") }}">
-                    <link rel="apple-touch-icon" href="{{ asset("images/pwa-icon-512.png") }}">
+                    <link rel="icon" type="image/png" href="{{ asset("images/pc-icon-192.png") }}">
+                    <link rel="apple-touch-icon" href="{{ asset("images/ios-icon-180.png") }}">
                     <meta name="theme-color" content="#ffffff">
                 '),
             )
