@@ -1532,7 +1532,7 @@ class AgendarCita extends Page
                 if (!empty($comentarioFinal)) {
                     $comentarioFinal .= "\n";
                 }
-                $comentarioFinal .= "Mantenimiento: " . $this->tipoMantenimiento;
+                $comentarioFinal .= "Servicios: " . $this->tipoMantenimiento;
             }
 
             // Agregar modalidad de servicio
@@ -1596,7 +1596,7 @@ class AgendarCita extends Page
                 if (!empty($comentarioFinal)) {
                     $comentarioFinal .= "\n";
                 }
-                $comentarioFinal .= "Mantenimiento: " . $this->tipoMantenimiento;
+                $comentarioFinal .= "Servicios: " . $this->tipoMantenimiento;
             }
 
             // 2. Servicios extras elegidos
