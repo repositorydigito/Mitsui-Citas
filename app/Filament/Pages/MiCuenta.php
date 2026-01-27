@@ -210,4 +210,23 @@ class MiCuenta extends Page
         // Redirigir a la página anterior
         return $this->volverPaginaAnterior();
     }
+
+    public function getEsCelularValidoProperty(): bool
+    {
+        $celular = $this->datosEdicion['celular'] ?? '';
+        $celularLimpio = preg_replace('/[^0-9]/', '', $celular);
+        $longitud = strlen($celularLimpio);
+
+        return ($longitud === 9 && str_starts_with($celularLimpio, '9')) || 
+               ($longitud === 11 && str_starts_with($celularLimpio, '5'));
+    }
+
+    public function getMostrarErrorCelularProperty(): bool
+    {
+        $celular = $this->datosEdicion['celular'] ?? '';
+        $celularLimpio = preg_replace('/[^0-9]/', '', $celular);
+        $longitud = strlen($celularLimpio);
+
+        return $longitud > 0 && !$this->esCelularValido;
+    }
 }
