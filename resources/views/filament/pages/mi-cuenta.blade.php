@@ -199,12 +199,12 @@
                                     id="celular"
                                     placeholder="Celular"
                                     wire:model.live="datosEdicion.celular"
-                                    class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 {{ $this->mostrarErrorCelular ? 'border-red-500' : ($this->esCelularValido ? 'border-green-500' : 'border-primary-600') }}"
+                                    class="w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 {{ $this->mostrarErrorCelular() ? 'border-red-500' : ($this->esCelularValido() ? 'border-green-500' : 'border-primary-600') }}"
                                     maxlength="11"
                                     inputmode="numeric"
                                     oninput="this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11)"
                                 >
-                                @if($this->mostrarErrorCelular)
+                                @if($this->mostrarErrorCelular())
                                     <span class="text-red-500 text-xs">El número debe tener 9 dígitos (empezando con 9) u 11 dígitos (empezando con 5)</span>
                                 @endif
                                 @error('datosEdicion.celular') <span class="text-primary-500 text-xs">{{ $message }}</span> @enderror
@@ -337,8 +337,8 @@
                         <button
                             wire:click="siguientePaso"
                             type="button"
-                            @if(!$this->esCelularValido) disabled @endif
-                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:z-10 focus:ring-2 focus:ring-primary-300 {{ !$this->esCelularValido ? 'opacity-50 cursor-not-allowed' : '' }}"
+                            @if(!$this->esCelularValido()) disabled @endif
+                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:z-10 focus:ring-2 focus:ring-primary-300 {{ !$this->esCelularValido() ? 'opacity-50 cursor-not-allowed' : '' }}"
                         >
                             Continuar
                         </button>
@@ -354,8 +354,8 @@
                         <button
                             wire:click="guardarCambios"
                             type="button"
-                            @if(!$this->esCelularValido) disabled @endif
-                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:z-10 focus:ring-2 focus:ring-primary-300 {{ !$this->esCelularValido ? 'opacity-50 cursor-not-allowed' : '' }}"
+                            @if(!$this->esCelularValido()) disabled @endif
+                            class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:z-10 focus:ring-2 focus:ring-primary-300 {{ !$this->esCelularValido() ? 'opacity-50 cursor-not-allowed' : '' }}"
                         >
                             Confirmar
                         </button>

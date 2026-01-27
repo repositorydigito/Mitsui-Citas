@@ -211,7 +211,7 @@ class MiCuenta extends Page
         return $this->volverPaginaAnterior();
     }
 
-    public function getEsCelularValidoProperty(): bool
+    public function esCelularValido(): bool
     {
         $celular = $this->datosEdicion['celular'] ?? '';
         $celularLimpio = preg_replace('/[^0-9]/', '', $celular);
@@ -221,12 +221,12 @@ class MiCuenta extends Page
                ($longitud === 11 && str_starts_with($celularLimpio, '5'));
     }
 
-    public function getMostrarErrorCelularProperty(): bool
+    public function mostrarErrorCelular(): bool
     {
         $celular = $this->datosEdicion['celular'] ?? '';
         $celularLimpio = preg_replace('/[^0-9]/', '', $celular);
         $longitud = strlen($celularLimpio);
 
-        return $longitud > 0 && !$this->esCelularValido;
+        return $longitud > 0 && !$this->esCelularValido();
     }
 }
