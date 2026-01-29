@@ -1532,6 +1532,7 @@ class AgendarCita extends Page
                 if (!empty($comentarioFinal)) {
                     $comentarioFinal .= "\n";
                 }
+                $comentarioFinal .= "Observaciones(Cita): \n";
                 $comentarioFinal .= "Servicios: " . $this->tipoMantenimiento;
             }
 
@@ -1596,6 +1597,7 @@ class AgendarCita extends Page
                 if (!empty($comentarioFinal)) {
                     $comentarioFinal .= "\n";
                 }
+                $comentarioFinal .= "Observaciones(Cita): \n";
                 $comentarioFinal .= "Servicios: " . $this->tipoMantenimiento;
             }
 
@@ -1613,6 +1615,14 @@ class AgendarCita extends Page
                     $comentarioFinal .= "\n";
                 }
                 $comentarioFinal .= "Comentarios: " . $this->comentarios;
+            }
+
+            // 4. Correo del cliente
+            if (!empty($user->email)) {
+                if (!empty($comentarioFinal)) {
+                    $comentarioFinal .= "\n";
+                }
+                $comentarioFinal .= $user->email;
             }
         }
         return $comentarioFinal;
