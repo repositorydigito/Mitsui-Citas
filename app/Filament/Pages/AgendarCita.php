@@ -1231,7 +1231,7 @@ class AgendarCita extends Page
                 $formatosABuscar = [$this->tipoMantenimiento];
                 if (strpos($this->tipoMantenimiento, 'Mantenimiento') !== false) {
                     $formato1 = str_replace('Mantenimiento ', '', $this->tipoMantenimiento);
-                    $formato2 = str_replace('000 Km', ',000 Km', $formato1);
+                    $formato2 = str_replace('000 KM', ',000 KM', $formato1);
                     $formatosABuscar[] = $formato1;
                     $formatosABuscar[] = $formato2;
                 }
@@ -1533,7 +1533,7 @@ class AgendarCita extends Page
                     $comentarioFinal .= "\n";
                 }
                 $comentarioFinal .= "Observaciones(Cita): \n";
-                $comentarioFinal .= "Servicios: " . $this->tipoMantenimiento;
+                $comentarioFinal .= "SERVICIO " . $this->tipoMantenimiento;
             }
 
             // Agregar modalidad de servicio
@@ -1598,7 +1598,7 @@ class AgendarCita extends Page
                     $comentarioFinal .= "\n";
                 }
                 $comentarioFinal .= "Observaciones(Cita): \n";
-                $comentarioFinal .= "Servicios: " . $this->tipoMantenimiento;
+                $comentarioFinal .= "SERVICIO " . $this->tipoMantenimiento;
             }
 
             // 2. Servicios extras elegidos
@@ -1713,7 +1713,7 @@ class AgendarCita extends Page
             // Si contiene "Mantenimiento", agregar variaciones
             if (strpos($this->tipoMantenimiento, 'Mantenimiento') !== false) {
                 $formato1 = str_replace('Mantenimiento ', '', $this->tipoMantenimiento);
-                $formato2 = str_replace('000 Km', ',000 Km', $formato1);
+                $formato2 = str_replace('000 KM', ',000 KM', $formato1);
                 $formatosABuscar[] = $formato1;
                 $formatosABuscar[] = $formato2;
             }
