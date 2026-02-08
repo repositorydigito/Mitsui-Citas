@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 use App\Jobs\UpdateComodinUsersC4CIdJob;
+use App\Jobs\UpdateAppointmentSapStatesJob;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -18,6 +19,12 @@ Schedule::command('appointments:update-package-ids --sync')->everyMinute();
 
 // Job para marcar citas como no-show cada hora
 Schedule::command('appointments:mark-no-show')->hourly();
+
+// Job para actualizar estados SAP de citas confirmadas cada hora
+Schedule::job(new UpdateAppointmentSapStatesJob)
+        ->hourly()
+        ->withoutOverlapping()
+        ->runInBackground();
 
 // Enviar recordatorios de citas todos los días a las 9:00 AM
 Schedule::command('citas:enviar-recordatorios')
